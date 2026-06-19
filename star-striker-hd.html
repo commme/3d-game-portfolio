@@ -50,6 +50,57 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+/* ===== JUICE KIT: WebAudio 효과음 + 화면 흔들림 + 피격 플래시 (외부 파일 없음) ===== */
+const Juice = (function(){
+  let ac, master, muted=false;
+  function C(){
+    if(!ac){ const AC=window.AudioContext||window.webkitAudioContext; ac=new AC();
+      master=ac.createGain(); master.gain.value=0.5; master.connect(ac.destination); }
+    if(ac.state==='suspended') ac.resume(); return ac;
+  }
+  const env=(g,t,vol,dur,atk)=>{ g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(vol,t+atk); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); };
+  function tone(o){ o=o||{}; const a=C(), t=a.currentTime+(o.delay||0), d=o.dur||.12,
+    osc=a.createOscillator(), g=a.createGain(); osc.type=o.type||'sine';
+    osc.frequency.setValueAtTime(o.f||440,t);
+    if(o.f2) osc.frequency.exponentialRampToValueAtTime(Math.max(1,o.f2),t+d);
+    env(g,t,o.vol||.3,d,o.atk||.005); osc.connect(g).connect(master); osc.start(t); osc.stop(t+d+.03); }
+  function noise(o){ o=o||{}; const a=C(), t=a.currentTime+(o.delay||0), d=o.dur||.2,
+    n=a.createBufferSource(), buf=a.createBuffer(1,Math.max(1,a.sampleRate*d),a.sampleRate),
+    ch=buf.getChannelData(0); for(let i=0;i<ch.length;i++) ch[i]=Math.random()*2-1; n.buffer=buf;
+    const g=a.createGain(), f=a.createBiquadFilter(); f.type=o.type||'lowpass'; f.frequency.value=o.cut||3000;
+    env(g,t,o.vol||.3,d,.002); n.connect(f); f.connect(g).connect(master); n.start(t); n.stop(t+d); }
+  let amt=0; const shake=a=>{ amt=Math.min(1.6,amt+a); };
+  (function tick(){ requestAnimationFrame(tick); amt*=0.86;
+    const c=document.querySelector('canvas'); if(!c) return;
+    if(amt<0.01){ if(c.style.transform) c.style.transform=''; return; }
+    const s=amt, x=(Math.random()*2-1)*s*11, y=(Math.random()*2-1)*s*11, r=(Math.random()*2-1)*s*1.1;
+    c.style.transform=`scale(1.06) translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${r.toFixed(2)}deg)`;
+  })();
+  function flash(color){ let f=document.getElementById('jflash');
+    if(!f){ f=document.createElement('div'); f.id='jflash';
+      f.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;transition:opacity .12s;'; document.body.appendChild(f); }
+    f.style.background=color||'rgba(255,40,60,.45)'; f.style.opacity='1'; setTimeout(()=>{f.style.opacity='0';},60); }
+  const btn=document.createElement('button'); btn.textContent='🔊'; btn.title='소리 켜기/끄기';
+  btn.style.cssText='position:fixed;bottom:14px;right:14px;z-index:10;width:40px;height:40px;border-radius:20px;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:18px;cursor:pointer;';
+  btn.onclick=()=>{ muted=!muted; if(master) master.gain.value=muted?0:0.5; btn.textContent=muted?'🔇':'🔊'; };
+  document.body.appendChild(btn);
+  addEventListener('pointerdown',C,{once:true}); addEventListener('keydown',C,{once:true});
+  return {
+    laser:()=>{ tone({type:'square',f:880,f2:240,dur:.10,vol:.10}); },
+    hit:()=>{ tone({type:'square',f:1200,f2:600,dur:.05,vol:.12}); noise({cut:5000,dur:.05,vol:.08}); },
+    boom:()=>{ noise({cut:1200,dur:.38,vol:.5}); tone({f:140,f2:40,dur:.4,vol:.4}); shake(.55); },
+    hurt:()=>{ tone({type:'sawtooth',f:220,f2:55,dur:.4,vol:.45}); noise({cut:2000,dur:.3,vol:.3}); shake(1.0); flash('rgba(255,40,60,.45)'); },
+    over:()=>{ [523,392,311,196].forEach((f,i)=>tone({type:'square',f,dur:.22,vol:.3,delay:i*.16})); },
+    jump:()=>{ tone({type:'square',f:320,f2:760,dur:.16,vol:.28}); },
+    land:()=>{ noise({cut:900,dur:.10,vol:.25}); shake(.18); },
+    coin:()=>{ tone({type:'square',f:988,dur:.07,vol:.3}); tone({type:'square',f:1319,dur:.12,vol:.3,delay:.07}); },
+    stomp:()=>{ tone({type:'square',f:500,f2:920,dur:.14,vol:.3}); noise({cut:3000,dur:.1,vol:.2}); shake(.35); },
+    win:()=>{ [523,659,784,1047].forEach((f,i)=>tone({type:'square',f,dur:.22,vol:.32,delay:i*.13})); },
+    shake, flash
+  };
+})();
+
 // ===== 렌더러: 톤매핑(ACES) + 그림자 =====
 const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setSize(innerWidth, innerHeight);
@@ -171,6 +222,7 @@ function shoot(){
     m.position.set(ship.position.x+dx, ship.position.y, ship.position.z-1.2);
     scene.add(m); lasers.push(m);
   }
+  Juice.laser();
 }
 
 function spawnEnemy(){
@@ -226,8 +278,8 @@ function restart(){
 function hitShip(){
   hp--;
   document.getElementById('hp').textContent = '❤'.repeat(Math.max(0,hp));
-  explode(ship.position, 0xff6688, 26);
-  if(hp<=0){ running=false; document.getElementById('fsc').textContent=score; document.getElementById('over').style.display='flex'; }
+  explode(ship.position, 0xff6688, 26); Juice.hurt();
+  if(hp<=0){ running=false; document.getElementById('fsc').textContent=score; document.getElementById('over').style.display='flex'; Juice.over(); }
 }
 
 // ===== [기법1] 후처리 컴포저: RenderPass + Bloom + OutputPass =====
@@ -286,9 +338,9 @@ function animate(now){
       for(let j=lasers.length-1;j>=0;j--){
         if(lasers[j].position.distanceTo(e.m.position) < e.r+.6){
           scene.remove(lasers[j]); lasers.splice(j,1);
-          e.hp--; explode(e.m.position, 0xffffaa, 6);
+          e.hp--; explode(e.m.position, 0xffffaa, 6); Juice.hit();
           if(e.hp<=0){ explode(e.m.position, e.ufo?0xc77dff:0xff9f45, 20); score += e.pts;
-            document.getElementById('sc').textContent = score; killed = true; }
+            document.getElementById('sc').textContent = score; killed = true; Juice.boom(); }
           break;
         }
       }
