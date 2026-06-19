@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a1040"/>
+      <stop offset="1" stop-color="#06030f"/>
+    </linearGradient>
+    <linearGradient id="pad" x1="12" y1="22" x2="52" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22e1ff"/>
+      <stop offset="1" stop-color="#ff37c7"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- gamepad body -->
+  <path d="M22 24h20c5.5 0 9 4 10 9l2.4 11c1 4.6-2 8-6 8-3 0-4.7-2-6.5-4l-2.2-2.4c-.9-1-2-1.6-3.3-1.6h-9.4c-1.3 0-2.4.6-3.3 1.6L17.8 50c-1.8 2-3.5 4-6.5 4-4 0-7-3.4-6-8l2.4-11c1-5 4.5-9 10-9z"
+        fill="none" stroke="url(#pad)" stroke-width="3.4" stroke-linejoin="round"/>
+  <!-- d-pad -->
+  <g fill="#22e1ff">
+    <rect x="20.5" y="33.5" width="9.5" height="3.6" rx="1.2"/>
+    <rect x="23.45" y="30.5" width="3.6" height="9.5" rx="1.2"/>
+  </g>
+  <!-- buttons -->
+  <circle cx="41.5" cy="32.5" r="2.6" fill="#ff37c7"/>
+  <circle cx="46.5" cy="37.5" r="2.6" fill="#ffe14d"/>
+</svg>
