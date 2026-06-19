@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>루멘 — 빛 반사 퍼즐</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07070f;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#ffe9a8;
+       font-size:16px;letter-spacing:1px;text-shadow:0 0 10px #cc9a2255;white-space:nowrap;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.4);font-size:12px;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#887;text-decoration:none;font-size:13px;
+        background:rgba(20,20,10,.6);padding:7px 12px;border-radius:18px;border:1px solid #443;}
+  #msg{position:fixed;top:52px;left:50%;transform:translateX(-50%);color:#7ef0d0;
+       font-size:20px;font-weight:bold;text-shadow:0 0 14px #7ef0d0;opacity:0;transition:opacity .4s;pointer-events:none;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">💡 LUMEN &nbsp;·&nbsp; 퍼즐 <span id="lv">1</span>/5</div>
+<div id="msg"></div>
+<div id="hint">거울을 클릭해 회전시키고, 빛을 수정까지 인도하세요</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07070f);
+scene.fog = new THREE.Fog(0x07070f, 30, 70);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, .1, 200);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x556677, .8));
+const moon = new THREE.DirectionalLight(0x8899ff, .5);
+moon.position.set(10,20,5);
+scene.add(moon);
+
+const N = 9, CELL = 2; // 9x9 그리드
+const ORG = -(N-1)/2*CELL; // 셀 0의 월드 좌표
+const cellPos = (cx,cz)=>new THREE.Vector3(ORG+cx*CELL, 0, ORG+cz*CELL);
+
+// 바닥
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(N*CELL, N*CELL),
+  new THREE.MeshStandardMaterial({color:0x12121f, roughness:.4, metalness:.3}));
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -.5;
+floor.receiveShadow = true;
+scene.add(floor);
+const grid = new THREE.GridHelper(N*CELL, N, 0x333355, 0x222238);
+grid.position.y = -.49;
+scene.add(grid);
+
+// ---------- 레벨 ----------
+// dir: [dx,dz], o: 0='/' 1='\'
+// 해법 검증 완료: '/' (o=0): (dx,dz)->(-dz,-dx) · '\' (o=1): (dx,dz)->(dz,dx)
+const LEVELS = [
+  // 1: (4,4) 거울을 '/'로 → 위로 꺾여 타깃 (4,0)
+  { e:{c:[0,4], d:[1,0]}, t:[4,0], mirrors:[{c:[4,4],o:1}], blocks:[] },
+  // 2: (6,2)'\' ↓ (6,6)'/' ← 타깃 (2,6)
+  { e:{c:[0,2], d:[1,0]}, t:[2,6], mirrors:[{c:[6,2],o:0},{c:[6,6],o:1}], blocks:[{c:[4,4]}] },
+  // 3: (8,0)'\' ↓ (8,4)'/' ← (4,4)'/' ↓ (4,8)'/' ← 타깃 (0,8)
+  { e:{c:[0,0], d:[1,0]}, t:[0,8], mirrors:[{c:[8,0],o:0},{c:[8,4],o:1},{c:[4,4],o:0},{c:[4,8],o:1}], blocks:[{c:[6,2]},{c:[2,4]}] },
+  // 4: (4,2)'\' → (7,2)'\' ↓ (7,6)'/' ← (1,6)'/' ↓ (1,8)'\' → 타깃 (4,8)
+  { e:{c:[4,0], d:[0,1]}, t:[4,8], mirrors:[{c:[4,2],o:0},{c:[7,2],o:1},{c:[7,6],o:1},{c:[1,6],o:0},{c:[1,8],o:0}], blocks:[{c:[4,4]},{c:[3,4]}] },
+  // 5: (2,4)'\' ↓ (2,7)'\' → (6,7)'/' ↑ (6,1)'/' → (8,1)'/' ↑ 타깃 (8,0)
+  { e:{c:[0,4], d:[1,0]}, t:[8,0], mirrors:[{c:[2,4],o:0},{c:[2,7],o:1},{c:[6,7],o:1},{c:[6,1],o:0},{c:[8,1],o:1}], blocks:[{c:[4,4]},{c:[5,3]},{c:[2,1]}] },
+];
+
+let level = 0, mirrors = [], blocks = [], lit = false, switching = false;
+let emitterMesh, targetMesh, targetCore;
+const beamGroup = new THREE.Group();
+scene.add(beamGroup);
+const levelObjects = [];
+
+const mirrorMat = new THREE.MeshStandardMaterial({color:0xbcd4ee, roughness:.05, metalness:.95});
+const frameMat = new THREE.MeshStandardMaterial({color:0x445566, roughness:.6});
+
+function clearLevel(){
+  levelObjects.forEach(o=>scene.remove(o));
+  levelObjects.length = 0;
+  mirrors = []; blocks = [];
+}
+function loadLevel(i){
+  clearLevel();
+  const L = LEVELS[i];
+  // 발광체
+  emitterMesh = new THREE.Group();
+  const eb = new THREE.Mesh(new THREE.CylinderGeometry(.55,.7,1.1,8),
+    new THREE.MeshStandardMaterial({color:0x333344, roughness:.4, metalness:.6}));
+  const lens = new THREE.Mesh(new THREE.SphereGeometry(.3,12,8),
+    new THREE.MeshStandardMaterial({color:0xffe9a8, emissive:0xffcc44, emissiveIntensity:1.2}));
+  lens.position.y = .35;
+  emitterMesh.add(eb, lens);
+  emitterMesh.position.copy(cellPos(L.e.c[0], L.e.c[1]));
+  scene.add(emitterMesh);
+  levelObjects.push(emitterMesh);
+
+  // 수정 타깃
+  targetMesh = new THREE.Group();
+  targetCore = new THREE.Mesh(new THREE.OctahedronGeometry(.7, 0),
+    new THREE.MeshStandardMaterial({color:0x55ffcc, emissive:0x115544, emissiveIntensity:.4, roughness:.1}));
+  targetCore.position.y = .7;
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(.5,.65,.5,6),
+    new THREE.MeshStandardMaterial({color:0x334444, roughness:.7}));
+  ped.position.y = -.2;
+  targetMesh.add(targetCore, ped);
+  targetMesh.position.copy(cellPos(L.t[0], L.t[1]));
+  scene.add(targetMesh);
+  levelObjects.push(targetMesh);
+
+  // 거울
+  for(const md of L.mirrors){
+    const g = new THREE.Group();
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(1.7,.14,1.3), mirrorMat);
+    glass.rotation.x = Math.PI/2; // 세움
+    glass.position.y = .65;
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(.3,.45,.4,8), frameMat);
+    base.position.y = -.3;
+    g.add(glass, base);
+    g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    g.position.copy(cellPos(md.c[0], md.c[1]));
+    scene.add(g);
+    const m = {g, cx:md.c[0], cz:md.c[1], o:md.o, targetRot:0};
+    m.targetRot = md.o===0 ? Math.PI/4 : -Math.PI/4;
+    g.rotation.y = m.targetRot;
+    mirrors.push(m);
+    levelObjects.push(g);
+  }
+  // 차단벽
+  for(const bd of L.blocks){
+    const b = new THREE.Mesh(new THREE.BoxGeometry(1.7,1.7,1.7),
+      new THREE.MeshStandardMaterial({color:0x2a2a3a, roughness:.9}));
+    b.position.copy(cellPos(bd.c[0], bd.c[1]));
+    b.position.y = .35;
+    b.castShadow = true;
+    scene.add(b);
+    blocks.push({cx:bd.c[0], cz:bd.c[1]});
+    levelObjects.push(b);
+  }
+  document.getElementById('lv').textContent = i+1;
+  lit = false; switching = false;
+  rebuildBeam();
+}
+
+// ---------- 빔 추적 ----------
+const beamMat = new THREE.MeshBasicMaterial({color:0xffe28a});
+const beamGlowMat = new THREE.MeshBasicMaterial({color:0xffcc44, transparent:true, opacity:.25});
+function rebuildBeam(){
+  while(beamGroup.children.length) beamGroup.remove(beamGroup.children[0]);
+  const L = LEVELS[level];
+  let cx = L.e.c[0], cz = L.e.c[1];
+  let dx = L.e.d[0], dz = L.e.d[1];
+  let segStart = cellPos(cx,cz);
+  lit = false;
+  for(let step=0; step<80; step++){
+    cx += dx; cz += dz;
+    const outside = cx<0||cx>=N||cz<0||cz>=N;
+    const blocked = blocks.some(b=>b.cx===cx&&b.cz===cz);
+    const mir = mirrors.find(m=>m.cx===cx&&m.cz===cz);
+    const isTarget = (cx===L.t[0]&&cz===L.t[1]);
+    if(outside || blocked || mir || isTarget){
+      const end = outside ? cellPos(cx,cz) : cellPos(cx,cz);
+      drawSeg(segStart, end);
+      if(mir){
+        const nd = mir.o===0 ? [-dz,-dx] : [dz,dx];
+        dx=nd[0]; dz=nd[1];
+        segStart = cellPos(cx,cz);
+        continue;
+      }
+      if(isTarget) lit = true;
+      break;
+    }
+  }
+  targetCore.material.emissiveIntensity = lit ? 1.6 : .4;
+  targetCore.material.emissive.setHex(lit ? 0x33ffbb : 0x115544);
+  if(lit && !switching){
+    switching = true;
+    const msg = document.getElementById('msg');
+    msg.textContent = level<LEVELS.length-1 ? '✨ 수정이 깨어났다!' : '🏆 모든 빛을 깨웠습니다!';
+    msg.style.opacity = 1;
+    setTimeout(()=>{
+      msg.style.opacity = 0;
+      level = (level+1) % LEVELS.length;
+      loadLevel(level);
+    }, 1700);
+  }
+}
+function drawSeg(a, b){
+  const len = a.distanceTo(b);
+  if(len < .01) return;
+  const mid = a.clone().add(b).multiplyScalar(.5);
+  mid.y = .65;
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,len,6), beamMat);
+  const glow = new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,len,6), beamGlowMat);
+  [core,glow].forEach(m=>{
+    m.position.copy(mid);
+    m.lookAt(b.x, .65, b.z);
+    m.rotateX(Math.PI/2);
+    beamGroup.add(m);
+  });
+}
+
+// ---------- 클릭 ----------
+const ray = new THREE.Raycaster();
+addEventListener('pointerdown', e=>{
+  if(e.target.tagName==='A') return;
+  ray.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1), camera);
+  for(const m of mirrors){
+    const hit = ray.intersectObject(m.g, true);
+    if(hit.length){
+      m.o = 1-m.o;
+      m.targetRot += Math.PI/2;
+      rebuildBeam();
+      break;
+    }
+  }
+});
+
+// ---------- 루프 ----------
+camera.position.set(0, 16, 15);
+camera.lookAt(0,0,0);
+let last = performance.now(), T=0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last=now;
+  T += dt;
+  mirrors.forEach(m=>{
+    m.g.rotation.y += (m.targetRot - m.g.rotation.y)*Math.min(1, dt*10);
+  });
+  if(targetCore){
+    targetCore.rotation.y += dt*(lit?3:0.6);
+    targetCore.position.y = .7 + Math.sin(T*2)*.07;
+  }
+  beamGroup.children.forEach((c,i)=>{
+    if(c.material===beamGlowMat) c.material.opacity = .2 + Math.sin(T*6)*.08;
+  });
+  camera.position.x = Math.sin(T*.1)*1.5;
+  camera.lookAt(0,0,0);
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+loadLevel(0);
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

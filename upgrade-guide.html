@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D 게임 비주얼 고도화 가이드</title>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0b0d18;color:#e7ecf7;
+       font-family:'Segoe UI','Malgun Gothic',sans-serif;line-height:1.6;}
+  a{color:#7ec8ff;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px;}
+  header{text-align:center;padding:54px 20px 22px;position:relative;}
+  h1{font-size:clamp(26px,4.5vw,42px);margin:0;letter-spacing:2px;
+     background:linear-gradient(90deg,#7ec8ff,#c77dff,#ff9fb2);
+     -webkit-background-clip:text;background-clip:text;color:transparent;}
+  header p{color:#97a1c4;margin:12px 0 0;font-size:14.5px;}
+  .back{position:absolute;top:18px;left:0;color:#9bd;text-decoration:none;font-size:13px;
+        background:rgba(30,38,70,.6);padding:7px 13px;border-radius:18px;}
+  h2{font-size:21px;margin:48px 0 6px;padding-bottom:8px;border-bottom:1px solid rgba(130,150,220,.2);}
+  h2 .em{color:#ffd36b;}
+  .lead{color:#9aa4c8;font-size:14px;margin:0 0 18px;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;}
+  .card{background:rgba(22,27,48,.7);border:1px solid rgba(130,150,220,.18);
+        border-radius:14px;padding:16px 18px;}
+  .card h3{margin:0 0 4px;font-size:16px;}
+  .fig{margin:-2px 0 12px;}
+  .fig svg{width:100%;height:auto;display:block;border-radius:10px;}
+  .card .sub{color:#8fb4ff;font-size:12px;margin-bottom:10px;}
+  .card p{margin:8px 0 0;font-size:13px;color:#aeb6d6;}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px;}
+  .b{font-size:11px;padding:3px 9px;border-radius:10px;font-weight:bold;}
+  .easy{background:#143d28;color:#5fe39a;}
+  .mid{background:#3a3414;color:#ffe07a;}
+  .hard{background:#4a1f2a;color:#ff9bb0;}
+  .impact{background:#1a2c50;color:#9cc8ff;}
+  .divider{grid-column:1/-1;color:#ffd36b;font-size:14px;font-weight:bold;margin-top:10px;
+           border-top:1px dashed rgba(255,210,100,.3);padding-top:14px;}
+  .divider span{color:#9aa4c8;font-weight:normal;font-size:12.5px;}
+  table{width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid rgba(130,150,220,.14);vertical-align:top;}
+  th{color:#bcd0ff;font-size:12px;letter-spacing:.5px;background:rgba(30,38,70,.4);}
+  tr:hover td{background:rgba(40,50,90,.25);}
+  .lic{display:inline-block;font-size:11px;font-weight:bold;padding:2px 8px;border-radius:9px;}
+  .cc0{background:#143d28;color:#5fe39a;}
+  .ccby{background:#1a3050;color:#7ec8ff;}
+  .ccnc{background:#4a2a15;color:#ffb877;}
+  .mix{background:#3a2350;color:#d3a6ff;}
+  .star{color:#ffd36b;letter-spacing:1px;}
+  .site{font-weight:bold;}
+  .pill{display:inline-block;background:rgba(126,200,255,.12);border:1px solid rgba(126,200,255,.25);
+        color:#7ec8ff;border-radius:10px;padding:1px 8px;font-size:11px;margin:1px 2px;}
+  .note{background:rgba(40,32,12,.5);border:1px solid rgba(255,200,90,.25);border-radius:12px;
+        padding:14px 18px;font-size:13px;color:#e7d9b8;margin-top:18px;}
+  footer{text-align:center;color:#566;font-size:12px;margin-top:50px;}
+  .tip{color:#8fb4ff;font-size:12.5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a class="back" href="portfolio.html">← 포트폴리오</a>
+  <h1>3D 게임 비주얼 고도화 가이드</h1>
+  <p>같은 엔진(Three.js)에서도 "에셋 + 조명 + 후처리"로 퀄리티가 결정됩니다.<br>
+     아래를 보고 어떤 게임에 무엇을 적용할지 직접 골라보세요.</p>
+</header>
+
+<h2>① 고도화 기법 11가지 <span class="em">— 기본 4 + 심화 7</span></h2>
+<p class="lead">각 카드의 <b>왼쪽 = 기존 / 오른쪽 = 적용 후</b> 그림으로 효과를 비교해보세요. 보통 <b>후처리 → 환경광 → PBR → 모델교체</b>를 먼저 잡고, 그다음 심화 기법으로 다듬습니다.</p>
+<div class="grid">
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs><radialGradient id="glow1" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#9effd9"/><stop offset="35%" stop-color="#3effb0" stop-opacity=".5"/>
+        <stop offset="100%" stop-color="#3effb0" stop-opacity="0"/></radialGradient></defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="68" y="40" width="18" height="44" rx="9" fill="#2c6b54"/>
+      <circle cx="77" cy="62" r="12" fill="#2f8f6a"/>
+      <circle cx="243" cy="62" r="48" fill="url(#glow1)"/>
+      <rect x="234" y="40" width="18" height="44" rx="9" fill="#dffff2"/>
+      <circle cx="243" cy="62" r="12" fill="#ffffff"/>
+      <path d="M156 62 h10 M162 58 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="104" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">기존</text>
+      <text x="243" y="104" fill="#7ee0b8" font-size="10" text-anchor="middle" font-family="sans-serif">블룸 적용</text>
+    </svg></div>
+    <h3>1. 후처리 (Post-processing)</h3>
+    <div class="sub">블룸 + 톤매핑(ACES)</div>
+    <div class="badges"><span class="b easy">난이도 쉬움</span><span class="b impact">효과 ★★★★</span></div>
+    <p>빛나는 부분이 화사하게 번지고 색감이 시네마틱해집니다. 코드 약 30줄. <b>빛·네온·우주</b> 게임에서 가장 극적.</p>
+    <p class="tip">이미 적용 예시 → star-striker-hd.html</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="matte2" cx="38%" cy="34%" r="75%">
+          <stop offset="0%" stop-color="#8b91a9"/><stop offset="100%" stop-color="#363c50"/></radialGradient>
+        <radialGradient id="gloss2" cx="34%" cy="28%" r="82%">
+          <stop offset="0%" stop-color="#ffffff"/><stop offset="20%" stop-color="#bcd6ff"/>
+          <stop offset="58%" stop-color="#41527a"/><stop offset="100%" stop-color="#0f1320"/></radialGradient>
+      </defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <circle cx="77" cy="56" r="33" fill="url(#matte2)"/>
+      <circle cx="243" cy="56" r="33" fill="url(#gloss2)"/>
+      <ellipse cx="231" cy="45" rx="6" ry="10" fill="#ffffff" opacity=".6"/>
+      <path d="M226 70 q18 6 36 -4" stroke="#bcd6ff" stroke-width="3" fill="none" opacity=".5" stroke-linecap="round"/>
+      <path d="M156 56 h10 M162 52 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="100" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">무광</text>
+      <text x="243" y="100" fill="#9cc8ff" font-size="10" text-anchor="middle" font-family="sans-serif">반사 적용</text>
+    </svg></div>
+    <h3>2. 환경광 (Environment / HDRI)</h3>
+    <div class="sub">RoomEnvironment · HDR 이미지</div>
+    <div class="badges"><span class="b easy">난이도 쉬움</span><span class="b impact">효과 ★★★</span></div>
+    <p>금속·유리·물 표면에 진짜 같은 반사가 생깁니다. PBR 재질을 살리는 핵심 광원. HDRI는 Poly Haven에서 무료.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bevel3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="#000000" stop-opacity=".38"/></linearGradient>
+        <pattern id="brick3" width="22" height="14" patternUnits="userSpaceOnUse">
+          <rect width="22" height="14" fill="#8a5440"/>
+          <rect x="1" y="1" width="20" height="5" rx="1" fill="#b4734f"/>
+          <rect x="1" y="8" width="9" height="5" rx="1" fill="#b4734f"/>
+          <rect x="12" y="8" width="9" height="5" rx="1" fill="#b4734f"/></pattern>
+      </defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="47" y="28" width="60" height="60" rx="5" fill="#7a5747"/>
+      <rect x="47" y="28" width="60" height="60" rx="5" fill="url(#bevel3)"/>
+      <rect x="213" y="28" width="60" height="60" rx="5" fill="url(#brick3)"/>
+      <rect x="213" y="28" width="60" height="60" rx="5" fill="url(#bevel3)"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="104" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">단색</text>
+      <text x="243" y="104" fill="#e0a877" font-size="10" text-anchor="middle" font-family="sans-serif">텍스처+요철</text>
+    </svg></div>
+    <h3>3. PBR 텍스처 / 디테일 재질</h3>
+    <div class="sub">색·거칠기·노멀·금속맵</div>
+    <div class="badges"><span class="b mid">난이도 중간</span><span class="b impact">효과 ★★★</span></div>
+    <p>평평한 단색 표면에 돌·금속·천 텍스처를 입혀 디테일을 부여. 텍스처는 ambientCG·Poly Haven에서 CC0로 받습니다.</p>
+  </div>
+
+  <div class="card" style="border-color:rgba(255,180,90,.4)">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="bot4" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#d4e2ff"/><stop offset="100%" stop-color="#6f86c8"/></linearGradient></defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <circle cx="77" cy="38" r="13" fill="#ffcf9e"/>
+      <rect x="64" y="51" width="26" height="33" rx="6" fill="#9a8ae0"/>
+      <rect x="66" y="84" width="8" height="14" rx="3" fill="#7a6ad0"/>
+      <rect x="80" y="84" width="8" height="14" rx="3" fill="#7a6ad0"/>
+      <g stroke="#2a3a66" stroke-width="1">
+        <rect x="218" y="48" width="8" height="22" rx="4" fill="url(#bot4)"/>
+        <rect x="260" y="48" width="8" height="22" rx="4" fill="url(#bot4)"/>
+        <rect x="225" y="44" width="36" height="32" rx="9" fill="url(#bot4)"/>
+        <rect x="231" y="26" width="24" height="20" rx="7" fill="url(#bot4)"/>
+        <rect x="231" y="76" width="9" height="22" rx="4" fill="url(#bot4)"/>
+        <rect x="246" y="76" width="9" height="22" rx="4" fill="url(#bot4)"/>
+      </g>
+      <rect x="235" y="31" width="16" height="7" rx="3.5" fill="#16203c"/>
+      <circle cx="240" cy="34.5" r="1.7" fill="#7efcff"/>
+      <circle cx="246" cy="34.5" r="1.7" fill="#7efcff"/>
+      <path d="M156 60 h10 M162 56 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="112" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">조립형</text>
+      <text x="243" y="112" fill="#9fb6ff" font-size="10" text-anchor="middle" font-family="sans-serif">실제 GLTF 모델</text>
+    </svg></div>
+    <h3>4. 실제 3D 모델 교체 (GLTF) ⭐</h3>
+    <div class="sub">도형 조립 → 전문가 제작 모델</div>
+    <div class="badges"><span class="b mid">난이도 중간~높음</span><span class="b impact" style="background:#4a3410;color:#ffd36b">효과 ★★★★★</span></div>
+    <p><b>가장 큰 변화.</b> 캐릭터·소품·차량을 진짜 모델로 교체. 리깅된 모델은 걷기·점프 애니메이션까지. 효과 압도적.</p>
+    <p class="tip">이미 적용 예시 → jump-island-gltf.html, model-gallery.html</p>
+  </div>
+
+  <div class="divider">▸ 여기서부터 심화 기법 <span>— 필요한 게임에만 골라 적용</span></div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="ball5" cx="38%" cy="32%" r="75%"><stop offset="0%" stop-color="#cfe0ff"/><stop offset="100%" stop-color="#5b6a96"/></radialGradient>
+        <radialGradient id="sh5" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#000000" stop-opacity=".5"/><stop offset="100%" stop-color="#000000" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <line x1="16" y1="90" x2="138" y2="90" stroke="#2a3656" stroke-width="2"/>
+      <line x1="182" y1="90" x2="304" y2="90" stroke="#2a3656" stroke-width="2"/>
+      <ellipse cx="77" cy="91" rx="8" ry="2" fill="#000000" opacity=".2"/>
+      <circle cx="77" cy="56" r="22" fill="url(#ball5)"/>
+      <ellipse cx="243" cy="90" rx="28" ry="6" fill="url(#sh5)"/>
+      <circle cx="243" cy="56" r="22" fill="url(#ball5)"/>
+      <path d="M243 77 a22 22 0 0 1 -15 -6" stroke="#161d33" stroke-width="4" fill="none" opacity=".45" stroke-linecap="round"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="106" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">평면적</text>
+      <text x="243" y="106" fill="#9fb6ff" font-size="10" text-anchor="middle" font-family="sans-serif">그림자+AO</text>
+    </svg></div>
+    <h3>5. 그림자 + 앰비언트 오클루전</h3>
+    <div class="sub">소프트 섀도우 · SSAO</div>
+    <div class="badges"><span class="b mid">난이도 중간</span><span class="b impact">효과 ★★★★</span></div>
+    <p>물체가 바닥·구석에 자연스러운 그늘로 "붙어" 보여 입체감과 무게감이 살아납니다.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs><radialGradient id="vfx6" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffd36b"/><stop offset="42%" stop-color="#ff8a3a" stop-opacity=".7"/>
+        <stop offset="100%" stop-color="#ff8a3a" stop-opacity="0"/></radialGradient></defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <circle cx="77" cy="60" r="13" fill="#c9762f"/>
+      <circle cx="243" cy="60" r="42" fill="url(#vfx6)"/>
+      <circle cx="243" cy="60" r="12" fill="#fff7e0"/>
+      <circle cx="212" cy="44" r="3" fill="#ffd36b"/>
+      <circle cx="274" cy="48" r="2.5" fill="#ff9f45"/>
+      <circle cx="277" cy="74" r="3" fill="#ffd36b"/>
+      <circle cx="210" cy="74" r="2.5" fill="#ff7a3a"/>
+      <rect x="240" y="20" width="4" height="4" rx="1" fill="#ffe08a"/>
+      <rect x="258" y="88" width="4" height="4" rx="1" fill="#ff9f45"/>
+      <rect x="224" y="58" width="3" height="3" rx="1" fill="#ffffff"/>
+      <path d="M156 60 h10 M162 56 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="106" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">밋밋</text>
+      <text x="243" y="106" fill="#ffc97a" font-size="10" text-anchor="middle" font-family="sans-serif">파티클·이펙트</text>
+    </svg></div>
+    <h3>6. 파티클 &amp; VFX</h3>
+    <div class="sub">폭발 · 연기 · 불꽃 · 마법</div>
+    <div class="badges"><span class="b mid">난이도 중간</span><span class="b impact">효과 ★★★★</span></div>
+    <p>타격감과 생동감을 만드는 핵심. 폭발·연기·잔상·마법 이펙트로 화면이 살아 움직입니다.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="sm7" cx="38%" cy="32%" r="75%"><stop offset="0%" stop-color="#ffd9a0"/><stop offset="100%" stop-color="#8a5a30"/></radialGradient>
+        <clipPath id="cl7"><circle cx="243" cy="58" r="28"/></clipPath>
+      </defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <circle cx="77" cy="58" r="28" fill="url(#sm7)"/>
+      <circle cx="243" cy="58" r="28" fill="#f2b866"/>
+      <g clip-path="url(#cl7)"><circle cx="259" cy="74" r="27" fill="#bd7f3c"/></g>
+      <circle cx="232" cy="46" r="6" fill="#fff3da"/>
+      <circle cx="243" cy="58" r="28" fill="none" stroke="#15110a" stroke-width="3"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="104" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">일반 셰이딩</text>
+      <text x="243" y="104" fill="#ffd6a0" font-size="10" text-anchor="middle" font-family="sans-serif">툰·셀셰이딩</text>
+    </svg></div>
+    <h3>7. 커스텀 셰이더</h3>
+    <div class="sub">물 · 용암 · 디졸브 · 툰(외곽선)</div>
+    <div class="badges"><span class="b hard">난이도 높음</span><span class="b impact">효과 ★★★★</span></div>
+    <p>물결·포스필드·사라지는 효과, 애니메이션풍 외곽선 등 특수 표현은 대부분 셰이더로 만듭니다.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs><linearGradient id="fog8" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#c9d6f0" stop-opacity="0"/><stop offset="100%" stop-color="#c9d6f0" stop-opacity=".5"/></linearGradient></defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <polygon points="20,92 45,60 70,92" fill="#3b4f7a"/>
+      <polygon points="55,92 85,50 115,92" fill="#324468"/>
+      <polygon points="95,92 120,66 145,92" fill="#3b4f7a"/>
+      <polygon points="186,92 211,60 236,92" fill="#3b4f7a"/>
+      <polygon points="221,92 251,50 281,92" fill="#324468"/>
+      <polygon points="261,92 286,66 311,92" fill="#3b4f7a" opacity=".55"/>
+      <polygon points="224,12 234,12 250,92 232,92" fill="#fff7d6" opacity=".12"/>
+      <polygon points="250,12 262,12 282,92 260,92" fill="#fff7d6" opacity=".1"/>
+      <rect x="170" y="52" width="146" height="62" fill="url(#fog8)"/>
+      <path d="M156 60 h10 M162 56 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="108" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">또렷함</text>
+      <text x="243" y="108" fill="#cfe0ff" font-size="10" text-anchor="middle" font-family="sans-serif">안개·빛줄기</text>
+    </svg></div>
+    <h3>8. 안개 &amp; 갓레이(빛줄기)</h3>
+    <div class="sub">Fog · Volumetric Light</div>
+    <div class="badges"><span class="b easy">난이도 쉬움~중간</span><span class="b impact">효과 ★★★</span></div>
+    <p>거리감과 분위기를 만듭니다. 특히 딥 블루·드림 폴·루멘처럼 공간감이 중요한 게임에 잘 맞아요.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs><radialGradient id="vig9" cx="50%" cy="50%" r="62%">
+        <stop offset="55%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#000000" stop-opacity=".5"/></radialGradient></defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <circle cx="62" cy="64" r="16" fill="#6f86b8"/>
+      <circle cx="100" cy="52" r="11" fill="#5a6f9c"/>
+      <circle cx="264" cy="50" r="14" fill="#caa06a" opacity=".3"/>
+      <circle cx="264" cy="50" r="11" fill="#caa06a" opacity=".4"/>
+      <circle cx="226" cy="66" r="16" fill="#e3ab60"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#ff9a3c" opacity=".08"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="url(#vig9)"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="106" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">플랫</text>
+      <text x="243" y="106" fill="#e7c79a" font-size="10" text-anchor="middle" font-family="sans-serif">색보정·DOF</text>
+    </svg></div>
+    <h3>9. 시네마틱 카메라</h3>
+    <div class="sub">색보정(LUT) · 피사계심도(DOF) · 비네팅</div>
+    <div class="badges"><span class="b mid">난이도 중간</span><span class="b impact">효과 ★★★</span></div>
+    <p>영화 같은 색감과 초점 흐림(배경 블러), 가장자리 어둠(비네팅)으로 분위기가 확 올라갑니다.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="floor10" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#33507a"/><stop offset="100%" stop-color="#13203a"/></linearGradient>
+        <linearGradient id="ref10" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0a0d18" stop-opacity="0"/><stop offset="100%" stop-color="#0a0d18" stop-opacity=".85"/></linearGradient>
+      </defs>
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="5" y="74" width="144" height="39" fill="#2a3450"/>
+      <rect x="65" y="42" width="24" height="32" fill="#ff9f45"/>
+      <rect x="171" y="74" width="144" height="39" fill="url(#floor10)"/>
+      <rect x="231" y="42" width="24" height="32" fill="#ff9f45"/>
+      <rect x="231" y="74" width="24" height="28" fill="#ff9f45" opacity=".4"/>
+      <rect x="171" y="74" width="144" height="39" fill="url(#ref10)"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="107" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">무광 바닥</text>
+      <text x="243" y="107" fill="#9fc8ff" font-size="10" text-anchor="middle" font-family="sans-serif">반사 바닥</text>
+    </svg></div>
+    <h3>10. 반사 (물 · 거울)</h3>
+    <div class="sub">Reflector · SSR</div>
+    <div class="badges"><span class="b mid">난이도 중간~높음</span><span class="b impact">효과 ★★★★</span></div>
+    <p>물 표면·바닥·거울에 실제 반사가 비칩니다. 딥 블루·루멘에 특히 효과적.</p>
+  </div>
+
+  <div class="card">
+    <div class="fig"><svg viewBox="0 0 320 132" xmlns="http://www.w3.org/2000/svg">
+      <rect x="4" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <rect x="170" y="8" width="146" height="106" rx="10" fill="#0a0d18" stroke="#23304f"/>
+      <g fill="#7ec8ff">
+        <rect x="34" y="30" width="15" height="13"/>
+        <rect x="49" y="43" width="15" height="13"/>
+        <rect x="64" y="56" width="15" height="13"/>
+        <rect x="79" y="69" width="15" height="13"/>
+        <rect x="94" y="82" width="15" height="13"/>
+      </g>
+      <polygon points="200,30 290,90 200,90" fill="#7ec8ff"/>
+      <path d="M156 58 h10 M162 54 l4 4 -4 4" stroke="#7ec8ff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="77" y="108" fill="#6c7798" font-size="10" text-anchor="middle" font-family="sans-serif">계단현상</text>
+      <text x="243" y="108" fill="#9fc8ff" font-size="10" text-anchor="middle" font-family="sans-serif">매끈한 경계</text>
+    </svg></div>
+    <h3>11. 안티에일리어싱</h3>
+    <div class="sub">SMAA · FXAA · TAA</div>
+    <div class="badges"><span class="b easy">난이도 쉬움</span><span class="b impact">효과 ★★</span></div>
+    <p>우글거리는 계단 모양 경계를 매끈하게 다듬어, 작지만 전체적으로 깔끔한 화면을 만듭니다.</p>
+  </div>
+
+</div>
+
+<h2>② 무료 에셋 사이트 <span class="em">— 모델·텍스처·HDRI</span></h2>
+<p class="lead">초록 <span class="lic cc0">CC0</span> 표시는 출처 표기도 필요 없고 <b>상업적 사용까지 완전 무료</b>라 가장 안전합니다.</p>
+<table>
+  <tr><th>사이트</th><th>라이선스</th><th>무엇이 있나</th><th>추천 용도</th></tr>
+  <tr><td class="site"><a href="https://kenney.nl/assets" target="_blank">Kenney</a></td><td><span class="lic cc0">CC0</span></td><td>로우폴리 게임 에셋 "키트" — 캐릭터, 도시/자연/우주, 타일, UI, 사운드까지 통째로</td><td>캐주얼·로우폴리 게임 전반. 통일감 좋음</td></tr>
+  <tr><td class="site"><a href="https://quaternius.com" target="_blank">Quaternius</a></td><td><span class="lic cc0">CC0</span></td><td>애니메이션 캐릭터·몬스터·동물·무기·자연·차량 팩 (스타일라이즈)</td><td>캐릭터·적·소품이 필요한 게임</td></tr>
+  <tr><td class="site"><a href="https://poly.pizza" target="_blank">Poly Pizza</a></td><td><span class="lic mix">CC0 / CC BY</span></td><td>검색형 단품 로우폴리 모델 수만 개. 키워드로 골라 GLB 바로 다운로드</td><td>특정 소품 하나가 급할 때</td></tr>
+  <tr><td class="site"><a href="https://polyhaven.com" target="_blank">Poly Haven</a></td><td><span class="lic cc0">CC0</span></td><td>HDRI(환경광 이미지)·고품질 PBR 텍스처·일부 모델</td><td>환경광(기법2)·텍스처(기법3) 소스</td></tr>
+  <tr><td class="site"><a href="https://ambientcg.com" target="_blank">ambientCG</a></td><td><span class="lic cc0">CC0</span></td><td>벽돌·금속·나무·천 등 PBR 머티리얼(색/노멀/거칠기맵 세트)</td><td>표면 디테일(기법3) 텍스처</td></tr>
+  <tr><td class="site"><a href="https://github.com/KhronosGroup/glTF-Sample-Assets" target="_blank">Khronos glTF Samples</a></td><td><span class="lic mix">모델별 상이</span></td><td>PBR 데모용 표준 모델(헬멧·플라이트헬멧 등). 학습·테스트에 최적</td><td>기법 테스트·데모 (라이선스 확인 필수)</td></tr>
+  <tr><td class="site"><a href="https://sketchfab.com" target="_blank">Sketchfab</a></td><td><span class="lic mix">다양</span></td><td>고퀄 모델 방대. "Downloadable + CC" 필터로 무료만 추리기</td><td>퀄리티 높은 특정 모델</td></tr>
+  <tr><td class="site"><a href="https://opengameart.org" target="_blank">OpenGameArt</a></td><td><span class="lic mix">다양</span></td><td>2D/3D 모델·텍스처·사운드·음악 종합</td><td>사운드·이펙트까지 한 번에</td></tr>
+</table>
+<div class="note">⚠️ <b>다운로드 전 라이선스를 꼭 확인하세요.</b> 같은 사이트라도 모델마다 라이선스가 다를 수 있어요(특히 Poly Pizza·Sketchfab). 게임을 판매·배포할 계획이면 <b>CC0만</b> 쓰면 분쟁 걱정이 전혀 없습니다.</div>
+
+<h2>③ 라이선스 치트시트</h2>
+<table>
+  <tr><th>라이선스</th><th>무료?</th><th>상업적 사용</th><th>출처 표기</th><th>한 줄 요약</th></tr>
+  <tr><td><span class="lic cc0">CC0</span></td><td>✅</td><td>✅ 가능</td><td>불필요</td><td>마음대로 써도 됨. 가장 안전</td></tr>
+  <tr><td><span class="lic ccby">CC BY</span></td><td>✅</td><td>✅ 가능</td><td><b>필요</b></td><td>제작자 이름만 어딘가에 적으면 OK</td></tr>
+  <tr><td><span class="lic ccnc">CC BY-NC</span></td><td>✅</td><td>❌ 불가</td><td>필요</td><td>개인·학습·데모만. 판매 ❌</td></tr>
+</table>
+
+<h2>④ 내 포트폴리오 게임별 추천 <span class="em">— 어디에 뭘 적용할까</span></h2>
+<p class="lead">"1순위" 만 적용해도 체감이 큽니다. 노력 대비 효과 순으로 적었어요.</p>
+<table>
+  <tr><th>게임</th><th>1순위</th><th>2순위</th><th>추천 에셋 소스</th><th>기대 효과</th></tr>
+  <tr><td class="site">점프 아일랜드<br><span class="tip">플랫포머</span></td><td>모델 교체 <span class="star">★★★★★</span></td><td>그림자+AO</td><td><span class="pill">Kenney 캐릭터</span><span class="pill">Quaternius</span></td><td>달걀 → 진짜 캐릭터. 완전 다른 게임 (예시 완성됨)</td></tr>
+  <tr><td class="site">스타 스트라이커<br><span class="tip">슈팅</span></td><td>후처리 <span class="star">★★★★</span></td><td>파티클 VFX</td><td><span class="pill">Kenney Space Kit</span></td><td>레이저·폭발이 빛난다 (HD 예시 완성됨)</td></tr>
+  <tr><td class="site">네온 튜브<br><span class="tip">러너</span></td><td>후처리 <span class="star">★★★★★</span></td><td>파티클 · AA</td><td><span class="pill">코드만</span></td><td>네온이 핵심 → 블룸만으로 끝판왕</td></tr>
+  <tr><td class="site">루멘<br><span class="tip">빛 퍼즐</span></td><td>후처리 <span class="star">★★★★</span></td><td>반사 · 환경광</td><td><span class="pill">코드만</span><span class="pill">Poly Haven HDRI</span></td><td>레이저 발광 + 거울 반사가 살아남</td></tr>
+  <tr><td class="site">딥 블루<br><span class="tip">물·심해</span></td><td>안개 + 반사</td><td>셰이더(물) · 모델</td><td><span class="pill">Quaternius 동물</span><span class="pill">Poly Pizza</span></td><td>물속 빛 산란 + 진짜 해양 생물</td></tr>
+  <tr><td class="site">먹깨비 볼<br><span class="tip">수집</span></td><td>모델 교체 <span class="star">★★★★★</span></td><td>그림자+AO</td><td><span class="pill">Kenney City/Nature</span></td><td>도형 집·나무·차 → 진짜 도시. 변화 막대</td></tr>
+  <tr><td class="site">드림 폴<br><span class="tip">꿈·낙하</span></td><td>색보정 + 안개</td><td>파티클 · 소품</td><td><span class="pill">Kenney</span><span class="pill">코드</span></td><td>몽환적 빛번짐과 색감으로 분위기 강화</td></tr>
+  <tr><td class="site">오르빗 퍼트<br><span class="tip">중력 골프</span></td><td>환경광 + 후처리</td><td>행성 텍스처(PBR)</td><td><span class="pill">Poly Haven 텍스처</span></td><td>행성 발광 + 사실적 표면</td></tr>
+  <tr><td class="site">모션 캐처<br><span class="tip">웹캠</span></td><td>후처리(별 반짝임)</td><td>파티클 · 모델</td><td><span class="pill">Kenney</span></td><td>떨어지는 별이 영롱하게</td></tr>
+  <tr><td class="site">3D 샌드박스<br><span class="tip">물리</span></td><td>PBR 텍스처</td><td>그림자+AO · 환경광</td><td><span class="pill">ambientCG</span></td><td>나무·금속·고무 재질감으로 사실성↑</td></tr>
+</table>
+
+<div class="note">💡 <b>추천 시작점:</b> 가장 적은 노력으로 가장 큰 변화를 원하면 → <b>네온 튜브에 후처리</b>(코드만) 또는 <b>먹깨비 볼에 Kenney 모델 교체</b>. 어떤 걸 진행할지 정하면 그 게임을 제대로 리메이크해 드릴게요.</div>
+
+<footer>Three.js · CC0 우선 권장 · 이 가이드는 단일 HTML 파일입니다</footer>
+</div>
+</body>
+</html>

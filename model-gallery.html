@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>3D 모델 갤러리 — 리깅 & 모션 쇼케이스</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c0f1a;font-family:'Segoe UI','Malgun Gothic',sans-serif;}
+  #title{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#eaf0ff;
+         font-size:17px;letter-spacing:1px;text-shadow:0 0 12px #2a4cff66;z-index:5;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#9bd;text-decoration:none;font-size:13px;
+        background:rgba(20,28,55,.7);padding:7px 12px;border-radius:18px;z-index:5;}
+  #hint{position:fixed;top:46px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.55);
+        font-size:12px;z-index:5;white-space:nowrap;}
+  #anim-panel{position:fixed;right:14px;top:80px;width:212px;max-height:calc(100vh - 250px);overflow-y:auto;
+        background:rgba(16,20,36,.9);border:1px solid rgba(130,150,220,.25);border-radius:14px;
+        padding:12px 13px;z-index:6;backdrop-filter:blur(6px);}
+  .ap-title{color:#9fd0ff;font-size:13px;font-weight:bold;margin-bottom:8px;}
+  .amodel{margin-bottom:12px;}
+  .aname{color:#fff;font-size:12.5px;font-weight:bold;margin-bottom:5px;}
+  .aname small{color:#8a93b8;font-weight:normal;}
+  .abtns{display:flex;flex-wrap:wrap;gap:5px;}
+  .abtns button{font-size:11px;padding:4px 8px;border-radius:9px;cursor:pointer;border:1px solid rgba(130,150,220,.3);
+        background:rgba(40,48,84,.7);color:#cdd6ee;transition:.15s;}
+  .abtns button:hover{background:rgba(70,90,150,.7);}
+  .abtns button.on{background:linear-gradient(90deg,#4d96ff,#7c5cff);color:#fff;border-color:transparent;}
+  .astatic{color:#6c7798;font-size:11px;}
+  #legend{position:fixed;bottom:0;left:0;right:0;z-index:5;
+          background:linear-gradient(180deg,transparent,rgba(8,10,20,.95) 38%);padding:28px 18px 12px;}
+  .keyrow{display:flex;gap:13px;justify-content:center;flex-wrap:wrap;font-size:12px;color:#aeb6d6;margin-bottom:8px;}
+  .lic{display:inline-block;font-size:11px;font-weight:bold;padding:2px 9px;border-radius:9px;margin-right:5px;}
+  .cc0{background:#143d28;color:#5fe39a;} .ccby{background:#1a3050;color:#7ec8ff;}
+  .ccnc{background:#4a2a15;color:#ffb877;}
+  .lesson{max-width:960px;margin:0 auto;text-align:center;font-size:12.5px;color:#e7d9b8;line-height:1.5;
+          background:rgba(40,32,12,.5);border:1px solid rgba(255,200,90,.25);border-radius:12px;padding:9px 16px;}
+  .lesson b{color:#ffe0a0;}
+  #loadmsg{position:fixed;bottom:150px;left:50%;transform:translateX(-50%);color:#7ec8ff;font-size:13px;z-index:6;}
+  #showall{position:fixed;top:14px;left:118px;color:#dcd6ff;font-size:13px;background:rgba(90,70,170,.7);
+        padding:7px 13px;border-radius:18px;z-index:7;border:1px solid rgba(160,150,255,.45);cursor:pointer;display:none;}
+  #showall:hover{background:rgba(120,95,210,.8);}
+  .aname.click{cursor:pointer;} .aname.click:hover{color:#9fd0ff;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<button id="showall">🔍 전체 보기</button>
+<div id="title">🎬 3D 모델 갤러리 — 리깅 & 모션 쇼케이스</div>
+<div id="hint">드래그로 회전 · 휠로 줌 · <b style="color:#9fd0ff">오른쪽 패널에서 모션을 바꿔보세요</b> · 맨 뒷줄은 Claude가 코드로 만든 캐릭터</div>
+<div id="loadmsg">모델 불러오는 중...</div>
+
+<div id="anim-panel"><div class="ap-title">🎬 모션 바꿔보기</div><div id="ap-list"></div></div>
+
+<div id="legend">
+  <div class="keyrow">
+    <span><span class="lic cc0">CC0</span>완전 무료·상업 OK</span>
+    <span><span class="lic ccby">CC BY</span>출처 표기</span>
+    <span><span class="lic ccnc">CC BY-NC</span>비상업만</span>
+    <span><span class="lic" style="background:#2a2f3a;color:#cfd6e6">기타</span>별도 약관</span>
+    <span><span class="lic" style="background:#2a1f44;color:#c9a6ff">직접제작</span>Claude 코드 제작·CC0</span>
+  </div>
+  <div class="lesson">💡 <b>맨 뒷줄 4개는 AI 이미지·외부 모델 없이 Claude가 코드로 직접 만든 캐릭터예요(무료·CC0).</b>
+    리깅이 들어가면 모델 하나로 걷기·달리기·점프·춤 등 여러 모션을 합니다 — 오른쪽 패널에서 직접 바꿔보세요.</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0c0f1a);
+const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 200);
+camera.position.set(0, 10, 16.5);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+scene.add(new THREE.AmbientLight(0xffffff, .35));
+const key = new THREE.DirectionalLight(0xffffff, 1.8);
+key.position.set(6, 14, 10); key.castShadow = true;
+key.shadow.mapSize.set(2048,2048);
+key.shadow.camera.left=-14; key.shadow.camera.right=14; key.shadow.camera.top=14; key.shadow.camera.bottom=-14;
+key.shadow.bias = -0.0003;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x88aaff, .6); fill.position.set(-6, 4, -4); scene.add(fill);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(90,90), new THREE.ShadowMaterial({opacity:.4}));
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+scene.add(new THREE.GridHelper(90, 90, 0x2a3a66, 0x1c2742));
+
+const LICCOLOR = { 'CC0':'#5fe39a', 'CC BY 4.0':'#7ec8ff', 'CC BY-NC':'#ffb877', '기타(Sony)':'#aab3d6', '직접제작 CC0':'#c9a6ff' };
+const MO = { Idle:'대기', Walking:'걷기', Walk:'걷기', Running:'달리기', Run:'달리기',
+  Dance:'춤', Jump:'점프', WalkJump:'점프이동', Wave:'인사', Punch:'펀치', Yes:'끄덕', No:'도리도리',
+  ThumbsUp:'엄지척', Death:'쓰러짐', Sitting:'앉기', Standing:'일어서기', Survey:'두리번거리기' };
+const ko = n => MO[n] || n;
+
+// ====== 절차적 캐릭터 빌더 (Claude가 코드로 제작) ======
+const MAT = (c,r=.6,m=.1)=> new THREE.MeshStandardMaterial({color:c, roughness:r, metalness:m});
+const box = (w,h,d,mat)=>{ const me=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat); me.castShadow=true; me.receiveShadow=true; return me; };
+const joint = (x,y,z)=>{ const g=new THREE.Group(); g.position.set(x,y,z); return g; };
+function limb(parent,x,y,len,w,mat){ const j=joint(x,y,0); const b=box(w,len,w,mat); b.position.y=-len/2; j.add(b); parent.add(j); return j; }
+
+// 공통 이족(biped) 골격
+function makeBiped(opt){
+  const root = new THREE.Group();
+  const hipY=0.7, legLen=0.7, armLen=0.66;
+  const hipL=limb(root,-0.17,hipY,legLen,0.22,opt.leg);
+  const hipR=limb(root, 0.17,hipY,legLen,0.22,opt.leg);
+  [hipL,hipR].forEach(h=>{ const f=box(0.26,0.14,0.34,opt.foot); f.position.set(0,-legLen+0.02,0.06); h.add(f); });
+  const torso=box(0.62,0.9,0.36,opt.body); torso.position.y=hipY+0.45; root.add(torso);
+  const head=new THREE.Group(); head.position.y=hipY+0.9+0.25; root.add(head); opt.head(head);
+  const shY=hipY+0.78;
+  const shL=limb(root,-0.42,shY,armLen,0.18,opt.arm);
+  const shR=limb(root, 0.42,shY,armLen,0.18,opt.arm);
+  if(opt.extra) opt.extra(torso, head);
+  return {root, torso, head, hipL, hipR, shL, shR};
+}
+function poseBiped(j, t, key){
+  const {root,torso,hipL,hipR,shL,shR}=j;
+  hipL.rotation.set(0,0,0); hipR.rotation.set(0,0,0); shL.rotation.set(0,0,0); shR.rotation.set(0,0,0);
+  root.position.y=0; root.rotation.set(0,0,0); torso.scale.set(1,1,1);
+  const S=Math.sin;
+  if(key==='idle'){ const b=S(t*2); torso.scale.y=1+b*.03; shL.rotation.z=.09+b*.04; shR.rotation.z=-.09-b*.04; root.position.y=b*.02; }
+  else if(key==='walk'){ const w=t*6; hipL.rotation.x=S(w)*.5; hipR.rotation.x=-S(w)*.5; shL.rotation.x=-S(w)*.4; shR.rotation.x=S(w)*.4; root.position.y=Math.abs(S(w))*.05; root.rotation.x=.05; }
+  else if(key==='run'){ const w=t*10; hipL.rotation.x=S(w)*.8; hipR.rotation.x=-S(w)*.8; shL.rotation.x=-S(w)*.7; shR.rotation.x=S(w)*.7; root.position.y=Math.abs(S(w))*.09; root.rotation.x=.22; }
+  else if(key==='jump'){ const p=(t*1.5)%1, up=S(p*Math.PI); root.position.y=up*.7; hipL.rotation.x=-up*.8; hipR.rotation.x=-up*.8; shL.rotation.x=-up*1.4; shR.rotation.x=-up*1.4; }
+  else if(key==='wave'){ shR.rotation.z=-2.3; shR.rotation.x=S(t*9)*.4; shL.rotation.z=.12; }
+  else if(key==='dance'){ root.rotation.z=S(t*4)*.12; root.position.y=Math.abs(S(t*8))*.05; shL.rotation.z=.6+S(t*4)*.5; shR.rotation.z=-.6-S(t*4)*.5; hipL.rotation.x=S(t*4)*.2; hipR.rotation.x=-S(t*4)*.2; }
+  else if(key==='float'){ root.position.y=.2+S(t*1.5)*.12; shL.rotation.z=.5+S(t*1.2)*.1; shR.rotation.z=-.5-S(t*1.2)*.1; hipL.rotation.x=-.2+S(t)*.1; hipR.rotation.x=-.2-S(t)*.1; root.rotation.x=.1; }
+  else if(key==='swim'){ root.position.y=.15+S(t*2)*.06; root.rotation.x=.4; shL.rotation.x=S(t*4)*1.2-.5; shR.rotation.x=S(t*4+Math.PI)*1.2-.5; hipL.rotation.x=S(t*6)*.3; hipR.rotation.x=-S(t*6)*.3; }
+}
+function bipedChar(joints, motions, def){
+  return { root:joints.root, joints, motions, def, cur:def, t:0,
+    setMotion(k){ this.cur=k; this.t=0; }, update(dt){ this.t+=dt; poseBiped(this.joints, this.t, this.cur); } };
+}
+
+// 1) 귀여운 로봇
+function buildRobot(){
+  const j = makeBiped({
+    body:MAT(0x4d7cff,.45,.3), leg:MAT(0x3a5fd0,.5,.3), arm:MAT(0x6f93ff,.5,.3), foot:MAT(0x2a3a66,.6),
+    head(h){ h.add(box(0.52,0.46,0.46, MAT(0x9fb6ff,.4,.4)));
+      const visor=box(0.4,0.16,0.02, MAT(0x10131f,.2,.5)); visor.position.set(0,0.02,0.24); h.add(visor);
+      [-0.1,0.1].forEach(x=>{ const e=new THREE.Mesh(new THREE.SphereGeometry(0.04,10,8), new THREE.MeshStandardMaterial({color:0x7efcff,emissive:0x33e6ff,emissiveIntensity:2})); e.position.set(x,0.02,0.25); h.add(e); });
+      const ant=box(0.03,0.2,0.03, MAT(0xcccccc,.4,.6)); ant.position.set(0,0.32,0); h.add(ant);
+      const ball=new THREE.Mesh(new THREE.SphereGeometry(0.06,10,8), new THREE.MeshStandardMaterial({color:0xff5a8a,emissive:0xaa1133,emissiveIntensity:1.5})); ball.position.set(0,0.44,0); h.add(ball);
+    }});
+  return bipedChar(j, [['대기','idle'],['걷기','walk'],['달리기','run'],['점프','jump'],['인사','wave'],['춤','dance']], 'walk');
+}
+// 2) 사람형
+function buildHuman(){
+  const skin=MAT(0xffcc99,.7,0);
+  const j = makeBiped({
+    body:MAT(0x4a8f5f,.7,0), leg:MAT(0x39497a,.7,0), arm:MAT(0x4a8f5f,.7,0), foot:MAT(0x2a2030,.7),
+    head(h){ const hd=new THREE.Mesh(new THREE.SphereGeometry(0.27,18,14), skin); hd.castShadow=true; h.add(hd);
+      const hair=box(0.5,0.2,0.5, MAT(0x3a2a1a,.8)); hair.position.y=0.16; h.add(hair);
+      [-0.1,0.1].forEach(x=>{ const e=new THREE.Mesh(new THREE.SphereGeometry(0.035,8,6), MAT(0x222,.4)); e.position.set(x,0.02,0.24); h.add(e); });
+    }});
+  return bipedChar(j, [['대기','idle'],['걷기','walk'],['달리기','run'],['점프','jump'],['인사','wave']], 'walk');
+}
+// 3) 우주비행사
+function buildAstro(){
+  const white=MAT(0xf0f3f8,.6,.05);
+  const j = makeBiped({
+    body:white, leg:white, arm:white, foot:MAT(0x55606e,.5,.2),
+    head(h){ const helm=new THREE.Mesh(new THREE.SphereGeometry(0.3,20,16), MAT(0xe8eef6,.3,.3)); helm.castShadow=true; h.add(helm);
+      const visor=new THREE.Mesh(new THREE.SphereGeometry(0.26,18,14,0.6,2.0,0.9,1.2), new THREE.MeshStandardMaterial({color:0x10243a,roughness:.1,metalness:.6,emissive:0x0a1830,emissiveIntensity:.5})); visor.position.z=0.02; h.add(visor);
+    },
+    extra(torso){ const pack=box(0.5,0.6,0.22, MAT(0xc9d2dd,.6,.2)); pack.position.set(0,0,-0.28); torso.add(pack);
+      const stripe=box(0.12,0.5,0.02, MAT(0xff7a3a,.5)); stripe.position.set(0,0,0.19); torso.add(stripe); }
+  });
+  return bipedChar(j, [['둥둥','float'],['손흔들기','wave'],['헤엄치기','swim'],['걷기','walk']], 'float');
+}
+// 4) 동물 (네발)
+function buildAnimal(){
+  const fur=MAT(0xd98a4a,.8,0), fur2=MAT(0xc9763a,.8,0);
+  const root=new THREE.Group();
+  root.scale.setScalar(1.5);
+  const body=box(1.1,0.5,0.5, fur); body.position.y=0.62; root.add(body);
+  const legs={};
+  [['FL',-0.38,0.32],['FR',0.38,0.32],['BL',-0.38,-0.32],['BR',0.38,-0.32]].forEach(([k,x,z])=>{
+    const lj=joint(x,0.5,z); const b=box(0.16,0.5,0.16, fur2); b.position.y=-0.25; lj.add(b); root.add(lj); legs[k]=lj;
+  });
+  const head=new THREE.Group(); head.position.set(0,0.78,0.62); root.add(head);
+  head.add(box(0.42,0.4,0.4, fur));
+  const snout=box(0.22,0.2,0.18, fur2); snout.position.set(0,-0.05,0.26); head.add(snout);
+  [-0.16,0.16].forEach(x=>{ const ear=box(0.14,0.2,0.06, fur2); ear.position.set(x,0.26,0); ear.rotation.z=x>0?-0.2:0.2; head.add(ear); });
+  [-0.1,0.1].forEach(x=>{ const e=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,6), MAT(0x222,.4)); e.position.set(x,0.05,0.22); head.add(e); });
+  const tail=joint(0,0.7,-0.55); const tb=box(0.1,0.1,0.4, fur2); tb.position.z=-0.2; tail.add(tb); root.add(tail);
+  const joints={root,body,head,tail,legs};
+  function pose(t,key){
+    Object.values(legs).forEach(l=>l.rotation.set(0,0,0)); tail.rotation.set(0,0,0); root.position.y=0; root.rotation.set(0,0,0); head.rotation.set(0,0,0);
+    const S=Math.sin;
+    if(key==='idle'){ tail.rotation.y=S(t*3)*.3; root.position.y=S(t*2)*.02; head.rotation.x=S(t*1.5)*.05; }
+    else if(key==='walk'){ const w=t*5; legs.FL.rotation.x=S(w)*.5; legs.BR.rotation.x=S(w)*.5; legs.FR.rotation.x=-S(w)*.5; legs.BL.rotation.x=-S(w)*.5; root.position.y=Math.abs(S(w*2))*.03; tail.rotation.y=S(w)*.3; }
+    else if(key==='run'){ const w=t*9; legs.FL.rotation.x=S(w)*.6; legs.FR.rotation.x=S(w)*.6; legs.BL.rotation.x=S(w+Math.PI)*.6; legs.BR.rotation.x=S(w+Math.PI)*.6; root.position.y=Math.abs(S(w))*.12; root.rotation.x=S(w)*.1; tail.rotation.y=S(w*2)*.4; }
+  }
+  return { root, motions:[['대기','idle'],['걷기','walk'],['뛰기','run']], def:'walk', cur:'walk', t:0,
+    setMotion(k){this.cur=k;this.t=0;}, update(dt){this.t+=dt; pose(this.t,this.cur);} };
+}
+const BUILD = { robot:buildRobot, human:buildHuman, astro:buildAstro, animal:buildAnimal };
+
+// ====== 모델 목록 (12종: GLB 8 + 코드제작 4) ======
+const GH = 'https://cdn.jsdelivr.net/gh/';
+const MODELS = [
+  { url:GH+'KhronosGroup/glTF-Sample-Models@master/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb', name:'Damaged Helmet', lic:'CC BY-NC', x:-5, z:3, t:2.6 },
+  { url:GH+'KhronosGroup/glTF-Sample-Models@master/2.0/Lantern/glTF-Binary/Lantern.glb', name:'Lantern', lic:'CC0', x:0, z:3, t:2.6 },
+  { url:GH+'KhronosGroup/glTF-Sample-Models@master/2.0/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb', name:'Milk Truck', lic:'CC BY 4.0', x:5, z:3, t:2.8, def:0 },
+  { url:GH+'mrdoob/three.js@r160/examples/models/gltf/RobotExpressive/RobotExpressive.glb', name:'Robot Expressive', lic:'CC0', x:-5, z:-1, t:2.8, def:'Walking' },
+  { url:GH+'KhronosGroup/glTF-Sample-Models@master/2.0/Fox/glTF-Binary/Fox.glb', name:'Fox', lic:'CC BY 4.0', x:0, z:-1, t:2.8, def:'Walk' },
+  { url:GH+'KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb', name:'Duck', lic:'기타(Sony)', x:5, z:-1, t:2.4 },
+  { url:'https://static.poly.pizza/8191def6-0e74-4a17-bc69-93c727ad62d0.glb', name:'Toy Robot', lic:'CC BY 4.0', x:-5, z:-5, t:2.6 },
+  { url:'https://static.poly.pizza/8c912a0c-9d1c-4859-853b-bb4d8b77815b.glb', name:'Polygonal Robot', lic:'CC0', x:0, z:-5, t:2.8 },
+  // 코드 제작 캐릭터 (맨 뒷줄)
+  { proc:true, build:'robot', name:'Cute Robot ✦', lic:'직접제작 CC0', x:5,  z:-5 },
+  { proc:true, build:'human', name:'Humanoid ✦',   lic:'직접제작 CC0', x:-5, z:-9 },
+  { proc:true, build:'animal',name:'Animal ✦',     lic:'직접제작 CC0', x:0,  z:-9 },
+  { proc:true, build:'astro', name:'Astronaut ✦',  lic:'직접제작 CC0', x:5,  z:-9 },
+];
+
+function pedestal(x,z){
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.7,.3,32), new THREE.MeshStandardMaterial({color:0x232a44, roughness:.5, metalness:.4}));
+  top.position.y = .15; top.receiveShadow = top.castShadow = true;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5,.04,8,40), new THREE.MeshStandardMaterial({color:0x4d7cff, emissive:0x2a4cff, emissiveIntensity:2, roughness:.4}));
+  ring.rotation.x = Math.PI/2; ring.position.y = .31;
+  g.add(top, ring); g.position.set(x,0,z); scene.add(g);
+}
+MODELS.forEach(m=>pedestal(m.x, m.z));
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, -3.5); controls.enableDamping = true;
+controls.minDistance = 6; controls.maxDistance = 42; controls.maxPolarAngle = Math.PI*0.52;
+controls.update();
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.35, 0.5, 0.9));
+composer.addPass(new OutputPass());
+
+const mixers = [];
+let loaded = 0;
+function done(){ loaded++; if(loaded>=MODELS.length) document.getElementById('loadmsg').style.display='none'; }
+
+function makeLabel(name, lic, color){
+  const c = document.createElement('canvas'); c.width = 512; c.height = 140;
+  const x = c.getContext('2d');
+  function rr(px,py,w,h,r){ x.beginPath(); x.moveTo(px+r,py); x.arcTo(px+w,py,px+w,py+h,r);
+    x.arcTo(px+w,py+h,px,py+h,r); x.arcTo(px,py+h,px,py,r); x.arcTo(px,py,px+w,py,r); x.closePath(); }
+  x.fillStyle = 'rgba(12,15,26,0.88)'; rr(6,6,500,128,18); x.fill();
+  x.strokeStyle = color; x.lineWidth = 3; rr(6,6,500,128,18); x.stroke();
+  x.textAlign = 'center';
+  x.fillStyle = '#ffffff'; x.font = 'bold 42px sans-serif'; x.fillText(name, 256, 56);
+  x.font = 'bold 32px sans-serif';
+  const tw = x.measureText(lic).width + 36;
+  x.fillStyle = color; rr(256-tw/2, 80, tw, 42, 12); x.fill();
+  x.fillStyle = '#0c0f1a'; x.fillText(lic, 256, 110);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthTest:false }));
+  sp.scale.set(2.6, 0.71, 1);
+  return sp;
+}
+
+function normalize(obj, targetMax){
+  obj.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  let s = targetMax / maxDim; if(!isFinite(s) || s <= 0) s = 1;
+  obj.scale.setScalar(s); obj.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(obj);
+  const c = box.getCenter(new THREE.Vector3());
+  obj.position.x -= c.x; obj.position.z -= c.z; obj.position.y -= box.min.y;
+  return box.max.y - box.min.y;
+}
+
+function playAction(cfg, name){
+  const a = cfg.actions[name]; if(!a) return;
+  if(cfg.current && cfg.current !== a) cfg.current.fadeOut(0.3);
+  a.reset().setLoop(THREE.LoopRepeat, Infinity).fadeIn(0.3).play();
+  cfg.current = a;
+}
+function selectMotion(cfg, key){
+  cfg.selectFn(key);
+  if(cfg.btnEls) Object.entries(cfg.btnEls).forEach(([k,el])=>el.classList.toggle('on', k===key));
+}
+function addPanel(cfg, items){
+  items = items.map(it=>Array.isArray(it)?{label:it[0],key:it[1]}:it);
+  const list = document.getElementById('ap-list');
+  const wrap = document.createElement('div'); wrap.className = 'amodel';
+  if(!items.length){
+    wrap.innerHTML = '<div class="aname">'+cfg.name+'</div><div class="astatic">정적 모델 (애니메이션 없음)</div>';
+    bindName(wrap,cfg); list.appendChild(wrap); return;
+  }
+  wrap.innerHTML = '<div class="aname">'+cfg.name+' <small>· '+items.length+'개 모션</small></div>';
+  const btns = document.createElement('div'); btns.className = 'abtns';
+  cfg.btnEls = {};
+  items.forEach(it=>{ const b=document.createElement('button'); b.textContent=it.label;
+    b.onclick=()=>selectMotion(cfg, it.key); btns.appendChild(b); cfg.btnEls[it.key]=b; });
+  wrap.appendChild(btns); bindName(wrap,cfg); list.appendChild(wrap);
+}
+
+const loader = new GLTFLoader();
+function loadModel(cfg){
+  const holder = new THREE.Group(); holder.position.set(cfg.x, 0.3, cfg.z); scene.add(holder); cfg._holder = holder;
+
+  if(cfg.proc){
+    const char = BUILD[cfg.build]();
+    char.root.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
+    holder.add(char.root);
+    cfg.procChar = char; cfg.selectFn = (k)=>char.setMotion(k);
+    const h = (new THREE.Box3().setFromObject(char.root)).max.y;
+    const label = makeLabel(cfg.name, cfg.lic, LICCOLOR[cfg.lic]); label.position.set(cfg.x, 0.3 + h + 0.7, cfg.z); scene.add(label); cfg.label=label;
+    addPanel(cfg, char.motions); selectMotion(cfg, char.def); done(); return;
+  }
+
+  cfg.actions = {};
+  loader.load(cfg.url, (gltf)=>{
+    const m = gltf.scene; m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; } });
+    const h = normalize(m, cfg.t); holder.add(m);
+    const clips = gltf.animations || []; let clipNames=[];
+    if(clips.length){
+      const mixer = new THREE.AnimationMixer(m); mixers.push(mixer);
+      clips.forEach(c=>{ if(c.name){ cfg.actions[c.name]=mixer.clipAction(c); clipNames.push(c.name); } });
+    }
+    const label = makeLabel(cfg.name, cfg.lic, LICCOLOR[cfg.lic]||'#fff'); label.position.set(cfg.x, 0.3 + h + 0.85, cfg.z); scene.add(label); cfg.label=label;
+    const items = clipNames.map(n=>({label:ko(n), key:n}));
+    cfg.selectFn = (k)=>playAction(cfg, k);
+    addPanel(cfg, items);
+    if(clipNames.length){
+      let defName = clipNames[0];
+      if(typeof cfg.def==='number') defName = clipNames[cfg.def]||clipNames[0];
+      else if(typeof cfg.def==='string' && cfg.actions[cfg.def]) defName = cfg.def;
+      selectMotion(cfg, defName);
+    }
+    done();
+  }, undefined, (e)=>{ console.error('load fail', cfg.url, e); addPanel(cfg, []); done(); });
+}
+MODELS.forEach(loadModel);
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+});
+
+
+// ====== 포커스(확대) 모드 ======
+function bindName(wrap,cfg){ const nm=wrap.querySelector('.aname'); if(nm){ nm.classList.add('click'); nm.title='클릭하면 이 모델만 확대'; nm.onclick=()=>focusModel(cfg); } }
+let focusGoalCam=null, focusGoalTgt=null, focusing=false, focusedCfg=null;
+function setDim(cfg, dim){
+  cfg._holder.traverse(o=>{ if(o.isMesh){
+    const mats = Array.isArray(o.material)?o.material:[o.material];
+    mats.forEach(mm=>{ if(mm.userData._o0===undefined){ mm.userData._o0=mm.opacity; mm.userData._t0=mm.transparent; }
+      mm.transparent = dim ? true : mm.userData._t0;
+      mm.opacity = dim ? 0.05 : mm.userData._o0;
+      mm.depthWrite = dim ? false : true; });
+  } });
+  if(cfg.label){ cfg.label.material.opacity = dim?0:1; cfg.label.visible = !dim; }
+}
+function focusModel(cfg){
+  focusedCfg=cfg;
+  MODELS.forEach(m=>{ if(m._holder) setDim(m, m!==cfg); });
+  focusGoalTgt = new THREE.Vector3(cfg.x, 1.2, cfg.z);
+  focusGoalCam = new THREE.Vector3(cfg.x + 1.1, 2.7, cfg.z + 6.8);
+  focusing = true;
+  document.getElementById('showall').style.display='block';
+}
+function showAll(){
+  focusedCfg=null;
+  MODELS.forEach(m=>{ if(m._holder) setDim(m,false); });
+  focusGoalTgt = new THREE.Vector3(0,1,-3.5);
+  focusGoalCam = new THREE.Vector3(0,10,16.5);
+  focusing = true;
+  document.getElementById('showall').style.display='none';
+}
+document.getElementById('showall').onclick = showAll;
+const _ray = new THREE.Raycaster(); let _dx=0,_dy=0,_dt=0;
+renderer.domElement.addEventListener('pointerdown', e=>{ _dx=e.clientX; _dy=e.clientY; _dt=performance.now(); });
+renderer.domElement.addEventListener('pointerup', e=>{
+  if(performance.now()-_dt>400) return;
+  if(Math.hypot(e.clientX-_dx, e.clientY-_dy) > 6) return;
+  _ray.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1), camera);
+  for(const m of MODELS){ if(m._holder){ const hit=_ray.intersectObject(m._holder, true); if(hit.length){ focusModel(m); return; } } }
+});
+
+const clock = new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 1/30);
+  MODELS.forEach(m=>{ if(m._holder) m._holder.rotation.y += dt*0.4; if(m.procChar) m.procChar.update(dt); });
+  mixers.forEach(mx=>mx.update(dt));
+  if(focusing && focusGoalCam){
+    const k = 1-Math.pow(0.0015, dt);
+    camera.position.lerp(focusGoalCam, k);
+    controls.target.lerp(focusGoalTgt, k);
+    if(camera.position.distanceTo(focusGoalCam) < 0.05) focusing=false;
+  }
+  controls.update();
+  composer.render();
+}
+animate();
+</script>
+</body>
+</html>

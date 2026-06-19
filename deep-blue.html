@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>딥 블루 — 심해 탐험</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#04445e;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#d8f4ff;
+       background:rgba(2,40,60,.7);padding:8px 24px;border-radius:24px;font-size:15px;
+       backdrop-filter:blur(4px);white-space:nowrap;}
+  #hud b{color:#7ef0d0;}
+  #o2wrap{position:fixed;top:58px;left:50%;transform:translateX(-50%);width:240px;height:10px;
+          background:rgba(2,40,60,.7);border-radius:6px;overflow:hidden;}
+  #o2{height:100%;width:100%;background:linear-gradient(90deg,#37c4ff,#7ef0d0);transition:width .3s;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.45);font-size:12px;background:rgba(2,40,60,.55);
+        padding:6px 14px;border-radius:20px;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#9cc;text-decoration:none;font-size:13px;
+        background:rgba(2,40,60,.7);padding:7px 12px;border-radius:18px;}
+  #over{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+        flex-direction:column;gap:14px;background:rgba(0,10,20,.6);color:#fff;font-size:32px;font-weight:bold;}
+  #over button{font-size:16px;padding:10px 26px;border:none;border-radius:24px;background:#37c4ff;color:#023;cursor:pointer;}
+  #flash{position:fixed;inset:0;background:#ff3050;opacity:0;pointer-events:none;transition:opacity .5s;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">🦪 진주 <b id="pearl">0</b>/12 &nbsp;·&nbsp; 산소 <b id="o2t">100</b>%</div>
+<div id="o2wrap"><div id="o2"></div></div>
+<div id="hint">↑↓ 전진/후진 · ←→ 방향 전환 · 스페이스 상승 · Shift 하강 · 해파리 주의! 진주가 산소를 채워줍니다</div>
+<div id="over"><span id="omsg"></span><button onclick="location.reload()">다시 잠수</button></div>
+<div id="flash"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06506e);
+scene.fog = new THREE.FogExp2(0x06506e, .022);
+const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, .1, 300);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x6699bb, .9));
+const sunRay = new THREE.DirectionalLight(0xbfeaff, .8);
+sunRay.position.set(10, 60, 5);
+scene.add(sunRay);
+
+// 모래 바닥
+const sand = new THREE.Mesh(new THREE.CircleGeometry(160, 40),
+  new THREE.MeshStandardMaterial({color:0xc7b287, roughness:1}));
+sand.rotation.x = -Math.PI/2;
+sand.position.y = -20;
+scene.add(sand);
+
+// 바위
+for(let i=0;i<26;i++){
+  const r = 1.5+Math.random()*3.5;
+  const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0),
+    new THREE.MeshStandardMaterial({color:0x4a6a72, roughness:1, flatShading:true}));
+  rock.position.set((Math.random()-.5)*150, -20+r*.5, (Math.random()-.5)*150);
+  rock.scale.y = .6;
+  scene.add(rock);
+}
+// 해초
+const weeds = [];
+for(let i=0;i<40;i++){
+  const h = 3+Math.random()*5;
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(.08,.16,h,6),
+    new THREE.MeshStandardMaterial({color:0x2f8f5f, roughness:.9}));
+  w.position.set((Math.random()-.5)*150, -20+h/2, (Math.random()-.5)*150);
+  scene.add(w);
+  weeds.push({m:w, ph:Math.random()*6});
+}
+// 산호
+for(let i=0;i<20;i++){
+  const c = new THREE.Mesh(new THREE.ConeGeometry(.6+Math.random()*.8, 1.5+Math.random()*2, 6),
+    new THREE.MeshStandardMaterial({color:[0xff7eb6,0xff9f45,0xc77dff][i%3], roughness:.8}));
+  c.position.set((Math.random()-.5)*150, -19.4, (Math.random()-.5)*150);
+  scene.add(c);
+}
+
+// 빛줄기 (수면 광선)
+for(let i=0;i<7;i++){
+  const beam = new THREE.Mesh(new THREE.PlaneGeometry(3+Math.random()*4, 60),
+    new THREE.MeshBasicMaterial({color:0x9fdfff, transparent:true, opacity:.05, side:THREE.DoubleSide, depthWrite:false}));
+  beam.position.set((Math.random()-.5)*120, 10, (Math.random()-.5)*120);
+  beam.rotation.z = .25 + Math.random()*.15;
+  beam.rotation.y = Math.random()*Math.PI;
+  scene.add(beam);
+}
+
+// 거품
+const bubGeo = new THREE.BufferGeometry();
+const BUB = 220, bp = new Float32Array(BUB*3);
+for(let i=0;i<BUB;i++){
+  bp[i*3]=(Math.random()-.5)*150; bp[i*3+1]=-20+Math.random()*36; bp[i*3+2]=(Math.random()-.5)*150;
+}
+bubGeo.setAttribute('position', new THREE.BufferAttribute(bp,3));
+const bubbles = new THREE.Points(bubGeo, new THREE.PointsMaterial({color:0xcfefff, size:.28, transparent:true, opacity:.7}));
+scene.add(bubbles);
+
+// ---------- 잠수함 ----------
+const sub = new THREE.Group();
+const body = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16),
+  new THREE.MeshStandardMaterial({color:0xffc233, roughness:.35, metalness:.2}));
+body.scale.set(1.6, .9, .9);
+const window1 = new THREE.Mesh(new THREE.SphereGeometry(.34, 12, 8),
+  new THREE.MeshStandardMaterial({color:0x9adfff, roughness:.1, emissive:0x224455}));
+window1.position.set(1.15, .12, 0);
+const fin = new THREE.Mesh(new THREE.BoxGeometry(.8, .9, .1),
+  new THREE.MeshStandardMaterial({color:0xe8590c, roughness:.5}));
+fin.position.set(-1.4, .4, 0);
+const prop = new THREE.Mesh(new THREE.BoxGeometry(.1, 1.1, .25),
+  new THREE.MeshStandardMaterial({color:0xcccccc, metalness:.6}));
+prop.position.x = -1.8;
+const lamp = new THREE.SpotLight(0xbfeaff, 1.2, 40, .5, .4);
+lamp.position.set(1.5,0,0);
+sub.add(body, window1, fin, prop, lamp);
+const lampTarget = new THREE.Object3D();
+lampTarget.position.set(10,0,0);
+sub.add(lampTarget);
+lamp.target = lampTarget;
+sub.position.set(0,-6,0);
+scene.add(sub);
+
+// ---------- 진주 ----------
+const pearls = [];
+for(let i=0;i<12;i++){
+  const g = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(.8,14,8,0,Math.PI*2,Math.PI/2,Math.PI/2),
+    new THREE.MeshStandardMaterial({color:0xd6a77a, roughness:.6, side:THREE.DoubleSide}));
+  const pearl = new THREE.Mesh(new THREE.SphereGeometry(.42, 16, 12),
+    new THREE.MeshStandardMaterial({color:0xfff0f5, emissive:0x887788, roughness:.1}));
+  pearl.position.y = .25;
+  g.add(shell, pearl);
+  let x,z;
+  do{ x=(Math.random()-.5)*140; z=(Math.random()-.5)*140; }while(Math.hypot(x,z)<10);
+  g.position.set(x, -19+Math.random()*12, z);
+  scene.add(g);
+  pearls.push({g, taken:false, ph:Math.random()*6});
+}
+
+// ---------- 해파리 ----------
+const jellies = [];
+for(let i=0;i<9;i++){
+  const g = new THREE.Group();
+  const bell = new THREE.Mesh(new THREE.SphereGeometry(1.1,16,10,0,Math.PI*2,0,Math.PI/2),
+    new THREE.MeshStandardMaterial({color:0xff7eb6, transparent:true, opacity:.55, emissive:0x661144, roughness:.3, side:THREE.DoubleSide}));
+  g.add(bell);
+  for(let t=0;t<6;t++){
+    const tent = new THREE.Mesh(new THREE.CylinderGeometry(.03,.02,2.2,4),
+      new THREE.MeshStandardMaterial({color:0xffaacc, transparent:true, opacity:.5}));
+    const a = t/6*Math.PI*2;
+    tent.position.set(Math.cos(a)*.6, -1.1, Math.sin(a)*.6);
+    g.add(tent);
+  }
+  g.position.set((Math.random()-.5)*130, -14+Math.random()*12, (Math.random()-.5)*130);
+  scene.add(g);
+  jellies.push({g, ph:Math.random()*6, dx:(Math.random()-.5)*1.4, dz:(Math.random()-.5)*1.4});
+}
+
+// 물고기 떼 (장식)
+const fishes = [];
+for(let i=0;i<30;i++){
+  const f = new THREE.Mesh(new THREE.ConeGeometry(.18,.6,5),
+    new THREE.MeshStandardMaterial({color:[0x37c4ff,0xffd93d,0xff9f45][i%3], roughness:.5}));
+  f.rotation.z = -Math.PI/2;
+  const grp = new THREE.Group(); grp.add(f);
+  grp.position.set((Math.random()-.5)*120, -16+Math.random()*14, (Math.random()-.5)*120);
+  scene.add(grp);
+  fishes.push({g:grp, ph:Math.random()*6, r:4+Math.random()*8, cx:grp.position.x, cz:grp.position.z, sp:.4+Math.random()*.7});
+}
+
+// ---------- 상태 ----------
+let heading = 0, o2 = 100, pearlCount = 0, over = false, invuln = 0;
+const vel = new THREE.Vector3();
+const keys = {};
+addEventListener('keydown', e=>{keys[e.code]=true; if(e.code==='Space')e.preventDefault();});
+addEventListener('keyup', e=>keys[e.code]=false);
+function endGame(msg){
+  over = true;
+  document.getElementById('omsg').textContent = msg;
+  document.getElementById('over').style.display = 'flex';
+}
+
+// ---------- 루프 ----------
+let last = performance.now(), T=0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last=now;
+  T += dt;
+
+  if(!over){
+    if(keys.ArrowLeft||keys.KeyA) heading += dt*1.8;
+    if(keys.ArrowRight||keys.KeyD) heading -= dt*1.8;
+    const fwd = new THREE.Vector3(Math.cos(heading), 0, -Math.sin(heading));
+    const acc = 16;
+    if(keys.ArrowUp||keys.KeyW) vel.add(fwd.clone().multiplyScalar(acc*dt));
+    if(keys.ArrowDown||keys.KeyS) vel.add(fwd.clone().multiplyScalar(-acc*dt*.6));
+    if(keys.Space) vel.y += acc*dt*.7;
+    if(keys.ShiftLeft||keys.ShiftRight) vel.y -= acc*dt*.7;
+    vel.multiplyScalar(Math.pow(.25, dt));
+    if(vel.length()>11) vel.setLength(11);
+    sub.position.add(vel.clone().multiplyScalar(dt));
+    sub.position.y = Math.max(-18.6, Math.min(16, sub.position.y));
+    const dC = Math.hypot(sub.position.x, sub.position.z);
+    if(dC > 145){ sub.position.x *= 145/dC; sub.position.z *= 145/dC; }
+    sub.rotation.y = heading;
+    sub.rotation.z = Math.max(-.4, Math.min(.4, vel.y*-.05));
+    prop.rotation.x += dt*(4+vel.length()*2);
+
+    // 산소
+    o2 -= dt*2.0;
+    if(invuln>0) invuln -= dt;
+    if(o2<=0){ o2=0; endGame(`🫧 산소 고갈... 진주 ${pearlCount}/12`); }
+    document.getElementById('o2').style.width = o2+'%';
+    document.getElementById('o2t').textContent = Math.ceil(o2);
+
+    // 진주 수집
+    for(const p of pearls){
+      if(p.taken) continue;
+      p.g.children[1].position.y = .25 + Math.sin(T*2+p.ph)*.08;
+      if(sub.position.distanceTo(p.g.position) < 2.4){
+        p.taken = true;
+        p.g.visible = false;
+        pearlCount++;
+        o2 = Math.min(100, o2+18);
+        document.getElementById('pearl').textContent = pearlCount;
+        if(pearlCount>=12) endGame('🏆 진주 12개 수집 완료! 심해의 보물왕!');
+      }
+    }
+
+    // 해파리
+    for(const j of jellies){
+      j.ph += dt;
+      j.g.position.y += Math.sin(j.ph*1.5)*dt*1.2;
+      j.g.position.x += j.dx*dt;
+      j.g.position.z += j.dz*dt;
+      j.g.scale.y = 1 + Math.sin(j.ph*3)*.15;
+      if(Math.hypot(j.g.position.x, j.g.position.z) > 140){ j.dx*=-1; j.dz*=-1; }
+      if(invuln<=0 && sub.position.distanceTo(j.g.position) < 2.6){
+        o2 = Math.max(0, o2-18);
+        invuln = 1.5;
+        const push = sub.position.clone().sub(j.g.position).normalize().multiplyScalar(9);
+        vel.add(push);
+        const f = document.getElementById('flash');
+        f.style.opacity = .35;
+        setTimeout(()=>f.style.opacity=0, 120);
+      }
+    }
+  }
+
+  // 장식 애니메이션
+  weeds.forEach(w=>{ w.m.rotation.z = Math.sin(T*1.2+w.ph)*.18; });
+  fishes.forEach(f=>{
+    f.ph += dt*f.sp;
+    f.g.position.x = f.cx + Math.cos(f.ph)*f.r;
+    f.g.position.z = f.cz + Math.sin(f.ph)*f.r;
+    f.g.rotation.y = -f.ph - Math.PI/2;
+  });
+  const bpa = bubbles.geometry.attributes.position;
+  for(let i=0;i<BUB;i++){
+    let y = bpa.getY(i) + dt*(1.2+(i%5)*.3);
+    if(y > 16) y = -20;
+    bpa.setY(i, y);
+  }
+  bpa.needsUpdate = true;
+
+  // 카메라
+  const back = new THREE.Vector3(-Math.cos(heading), 0, Math.sin(heading));
+  const cp = sub.position.clone().add(back.multiplyScalar(9)).add(new THREE.Vector3(0,3.5,0));
+  camera.position.lerp(cp, 1-Math.pow(.002,dt));
+  camera.lookAt(sub.position);
+
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

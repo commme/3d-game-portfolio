@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>3D 물리 샌드박스</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1a2e;font-family:'Segoe UI',sans-serif;}
+  #ui{position:fixed;top:12px;left:12px;background:rgba(20,20,40,.85);color:#eee;
+      padding:14px 16px;border-radius:12px;width:215px;backdrop-filter:blur(6px);
+      box-shadow:0 4px 20px rgba(0,0,0,.4);font-size:13px;user-select:none;}
+  #ui h1{font-size:16px;margin:0 0 10px;color:#7ec8ff;}
+  .row{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+  button{flex:1;background:#2d4a7a;color:#fff;border:none;border-radius:8px;
+         padding:7px 4px;cursor:pointer;font-size:12px;transition:.15s;}
+  button:hover{background:#3d6db5;}
+  button.active{background:#5a9cf0;box-shadow:0 0 8px #5a9cf0;}
+  button.danger{background:#7a2d3a;}
+  button.danger:hover{background:#b53d52;}
+  input[type=range]{width:100%;}
+  label{display:block;margin:6px 0 2px;color:#aac;}
+  #count{color:#7ec8ff;font-weight:bold;}
+  #hint{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.55);font-size:12px;background:rgba(20,20,40,.6);
+        padding:6px 14px;border-radius:20px;white-space:nowrap;}
+</style>
+</head>
+<body>
+<div id="ui">
+  <h1>🧊 3D 물리 샌드박스</h1>
+  <div class="row">
+    <button id="bBox" class="active">📦 상자</button>
+    <button id="bSphere">⚪ 공</button>
+  </div>
+  <div class="row">
+    <button id="bCyl">🥫 원기둥</button>
+    <button id="bTower">🗼 탑 쌓기</button>
+  </div>
+  <div class="row">
+    <button id="bShoot">🚀 발사!</button>
+    <button id="bBoom" class="danger">💥 폭발</button>
+  </div>
+  <div class="row">
+    <button id="bReset" class="danger">🔄 초기화</button>
+  </div>
+  <label>중력: <span id="gVal">9.8</span></label>
+  <input type="range" id="gravity" min="0" max="25" step="0.1" value="9.8">
+  <label>물체 수: <span id="count">0</span></label>
+</div>
+<div id="hint">바닥 클릭: 물체 생성 · 드래그: 카메라 회전 · 휠: 줌 · 스페이스: 발사</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+<script>
+// ---------- 기본 설정 ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a2e);
+scene.fog = new THREE.Fog(0x1a1a2e, 40, 90);
+
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// 조명
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const sun = new THREE.DirectionalLight(0xfff2dd, 0.9);
+sun.position.set(15, 25, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -25; sun.shadow.camera.right = 25;
+sun.shadow.camera.top = 25;  sun.shadow.camera.bottom = -25;
+scene.add(sun);
+
+// ---------- 물리 세계 ----------
+const world = new CANNON.World();
+world.gravity.set(0, -9.8, 0);
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.solver.iterations = 12;
+const mat = new CANNON.Material();
+world.addContactMaterial(new CANNON.ContactMaterial(mat, mat, {friction:0.4, restitution:0.35}));
+
+// 바닥
+const groundBody = new CANNON.Body({mass:0, material:mat, shape:new CANNON.Plane()});
+groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2);
+world.addBody(groundBody);
+
+const groundMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(100,100),
+  new THREE.MeshStandardMaterial({color:0x24304a, roughness:0.9}));
+groundMesh.rotation.x = -Math.PI/2;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
+scene.add(new THREE.GridHelper(100, 50, 0x3a4a6a, 0x2a3550));
+
+// ---------- 물체 관리 ----------
+const objects = [];   // {mesh, body}
+const MAX = 150;
+const palette = [0xff6b6b,0xffd93d,0x6bcb77,0x4d96ff,0xc77dff,0xff9f45,0x4dd0e1,0xf06292];
+const randColor = () => palette[Math.floor(Math.random()*palette.length)];
+
+function addObject(mesh, body){
+  mesh.castShadow = mesh.receiveShadow = true;
+  scene.add(mesh); world.addBody(body);
+  objects.push({mesh, body});
+  if(objects.length > MAX) removeObject(objects.shift());
+  document.getElementById('count').textContent = objects.length;
+}
+function removeObject(o){
+  scene.remove(o.mesh); world.removeBody(o.body);
+  o.mesh.geometry.dispose(); o.mesh.material.dispose();
+}
+
+function spawnBox(x,y,z,s){
+  s = s || 0.6 + Math.random()*0.8;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(s,s,s),
+    new THREE.MeshStandardMaterial({color:randColor(), roughness:0.6}));
+  const body = new CANNON.Body({mass:s*s*s*2, material:mat,
+    shape:new CANNON.Box(new CANNON.Vec3(s/2,s/2,s/2)), position:new CANNON.Vec3(x,y,z)});
+  body.quaternion.setFromEuler(Math.random(),Math.random(),Math.random());
+  addObject(mesh, body);
+  return body;
+}
+function spawnSphere(x,y,z,r){
+  r = r || 0.35 + Math.random()*0.45;
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(r,24,18),
+    new THREE.MeshStandardMaterial({color:randColor(), roughness:0.35, metalness:0.15}));
+  const body = new CANNON.Body({mass:r*r*r*8, material:mat,
+    shape:new CANNON.Sphere(r), position:new CANNON.Vec3(x,y,z)});
+  addObject(mesh, body);
+  return body;
+}
+function spawnCylinder(x,y,z){
+  const r = 0.35 + Math.random()*0.35, h = 0.8 + Math.random()*0.8;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,20),
+    new THREE.MeshStandardMaterial({color:randColor(), roughness:0.55}));
+  const shape = new CANNON.Cylinder(r,r,h,12);
+  const q = new CANNON.Quaternion();
+  q.setFromAxisAngle(new CANNON.Vec3(1,0,0), -Math.PI/2); // cannon 원기둥은 Z축 기준 → Y축으로
+  const body = new CANNON.Body({mass:r*r*h*4, material:mat, position:new CANNON.Vec3(x,y,z)});
+  body.addShape(shape, new CANNON.Vec3(), q);
+  addObject(mesh, body);
+  return body;
+}
+function buildTower(x,z){
+  const s = 0.9;
+  for(let i=0;i<8;i++){
+    const b = spawnBox(x + (Math.random()-0.5)*0.05, s/2 + i*s*1.01, z, s);
+    b.quaternion.set(0,0,0,1);
+    b.velocity.set(0,0,0); b.angularVelocity.set(0,0,0);
+  }
+}
+
+// ---------- 카메라 궤도 컨트롤 ----------
+let camTheta = 0.7, camPhi = 1.1, camDist = 22;
+const camTarget = new THREE.Vector3(0, 2, 0);
+function updateCamera(){
+  camPhi = Math.max(0.15, Math.min(1.45, camPhi));
+  camDist = Math.max(6, Math.min(60, camDist));
+  camera.position.set(
+    camTarget.x + camDist*Math.sin(camPhi)*Math.sin(camTheta),
+    camTarget.y + camDist*Math.cos(camPhi),
+    camTarget.z + camDist*Math.sin(camPhi)*Math.cos(camTheta));
+  camera.lookAt(camTarget);
+}
+updateCamera();
+
+let dragging=false, moved=0, px=0, py=0;
+renderer.domElement.addEventListener('pointerdown', e=>{dragging=true; moved=0; px=e.clientX; py=e.clientY;});
+addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  const dx=e.clientX-px, dy=e.clientY-py;
+  moved += Math.abs(dx)+Math.abs(dy);
+  camTheta -= dx*0.006; camPhi -= dy*0.006;
+  px=e.clientX; py=e.clientY; updateCamera();
+});
+addEventListener('pointerup', e=>{
+  if(dragging && moved < 6 && e.target===renderer.domElement) onClickGround(e);
+  dragging=false;
+});
+addEventListener('wheel', e=>{camDist += e.deltaY*0.02; updateCamera();}, {passive:true});
+
+// ---------- 클릭으로 생성 ----------
+let mode = 'box';
+const raycaster = new THREE.Raycaster();
+function onClickGround(e){
+  raycaster.setFromCamera(new THREE.Vector2(e.clientX/innerWidth*2-1, -(e.clientY/innerHeight)*2+1), camera);
+  const hit = raycaster.intersectObject(groundMesh)[0];
+  if(!hit) return;
+  const {x,z} = hit.point;
+  if(mode==='box') spawnBox(x, 7+Math.random()*3, z);
+  else if(mode==='sphere') spawnSphere(x, 7+Math.random()*3, z);
+  else if(mode==='cyl') spawnCylinder(x, 7+Math.random()*3, z);
+  else if(mode==='tower') buildTower(x, z);
+}
+
+// ---------- 발사 / 폭발 / 초기화 ----------
+function shoot(){
+  const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+  const p = camera.position.clone().add(dir.clone().multiplyScalar(2));
+  const b = spawnSphere(p.x, p.y, p.z, 0.5);
+  b.velocity.set(dir.x*28, dir.y*28, dir.z*28);
+}
+function explode(){
+  const c = new CANNON.Vec3(camTarget.x, 0.5, camTarget.z);
+  objects.forEach(o=>{
+    const d = o.body.position.vsub(c);
+    const dist = Math.max(d.length(), 0.8);
+    d.normalize();
+    const f = 320/(dist*dist) * o.body.mass;
+    o.body.applyImpulse(new CANNON.Vec3(d.x*f, Math.abs(d.y*f)+f*0.6, d.z*f), o.body.position);
+  });
+}
+function resetAll(){
+  while(objects.length) removeObject(objects.pop());
+  document.getElementById('count').textContent = 0;
+}
+
+// ---------- UI ----------
+const modeBtns = {box:'bBox', sphere:'bSphere', cyl:'bCyl', tower:'bTower'};
+Object.entries(modeBtns).forEach(([m,id])=>{
+  document.getElementById(id).onclick = ()=>{
+    mode = m;
+    Object.values(modeBtns).forEach(i=>document.getElementById(i).classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  };
+});
+document.getElementById('bShoot').onclick = shoot;
+document.getElementById('bBoom').onclick = explode;
+document.getElementById('bReset').onclick = resetAll;
+document.getElementById('gravity').oninput = e=>{
+  world.gravity.set(0, -e.target.value, 0);
+  document.getElementById('gVal').textContent = e.target.value;
+};
+addEventListener('keydown', e=>{if(e.code==='Space'){e.preventDefault(); shoot();}});
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// 시작 데모: 작은 탑 + 공 몇 개
+buildTower(0, 0);
+for(let i=0;i<5;i++) spawnSphere((Math.random()-0.5)*8, 5+i*2, (Math.random()-0.5)*8);
+
+// ---------- 루프 ----------
+let last = performance.now();
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last = now;
+  world.step(1/60, dt, 3);
+  objects.forEach(o=>{
+    o.mesh.position.copy(o.body.position);
+    o.mesh.quaternion.copy(o.body.quaternion);
+    if(o.body.position.y < -20){ // 멀리 떨어진 물체 제거
+      removeObject(o);
+      objects.splice(objects.indexOf(o),1);
+      document.getElementById('count').textContent = objects.length;
+    }
+  });
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

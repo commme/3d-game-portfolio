@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>오르빗 퍼트 — 우주 중력 골프</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#cfe3ff;
+       background:rgba(10,14,30,.75);padding:8px 22px;border-radius:24px;font-size:15px;
+       backdrop-filter:blur(4px);white-space:nowrap;}
+  #hud b{color:#7ec8ff;}
+  #msg{position:fixed;top:64px;left:50%;transform:translateX(-50%);color:#ffd93d;
+       font-size:18px;font-weight:bold;text-shadow:0 0 12px rgba(255,217,61,.6);
+       pointer-events:none;transition:opacity .4s;opacity:0;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.5);font-size:12px;background:rgba(10,14,30,.6);
+        padding:6px 14px;border-radius:20px;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#9ab;text-decoration:none;font-size:13px;
+        background:rgba(10,14,30,.7);padding:7px 12px;border-radius:18px;}
+  #back:hover{color:#fff;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">⛳ LEVEL <b id="lv">1</b>/4 &nbsp;·&nbsp; 타수 <b id="st">0</b></div>
+<div id="msg"></div>
+<div id="hint">공을 드래그해서 새총처럼 당겼다 놓으세요 — 행성 중력이 궤도를 휘게 합니다</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 300);
+camera.position.set(0, 40, 26);
+camera.lookAt(0, 0, 0);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff, .55));
+const sun = new THREE.PointLight(0xfff0dd, 1.1, 200);
+sun.position.set(20, 40, 10);
+scene.add(sun);
+
+// 별 배경
+(function(){
+  const g = new THREE.BufferGeometry();
+  const v = [];
+  for(let i=0;i<900;i++){
+    const r = 120 + Math.random()*80, t = Math.random()*Math.PI*2, p = Math.acos(2*Math.random()-1);
+    v.push(r*Math.sin(p)*Math.cos(t), r*Math.cos(p), r*Math.sin(p)*Math.sin(t));
+  }
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0x8899cc, size:.7})));
+})();
+
+// ---------- 레벨 정의 ----------
+const LEVELS = [
+  { start:{x:-22,z:0}, goal:{x:22,z:0},
+    planets:[{x:0,z:0,r:4,c:0xff8c5a}] },
+  { start:{x:-24,z:10}, goal:{x:24,z:-10},
+    planets:[{x:-6,z:-4,r:3,c:0x6bcb77},{x:10,z:6,r:3.5,c:0x4d96ff}] },
+  { start:{x:-24,z:0}, goal:{x:18,z:0},
+    planets:[{x:6,z:0,r:5,c:0xc77dff},{x:-8,z:-11,r:2.2,c:0xffd93d}] }, // 골이 큰 행성 너머
+  { start:{x:0,z:14}, goal:{x:0,z:-14},
+    planets:[{x:-9,z:0,r:3.4,c:0xff6b6b},{x:9,z:0,r:3.4,c:0x4dd0e1},{x:0,z:0,r:1.6,c:0xffffff}] },
+];
+
+const BALL_R = 0.55, G = 38, MAX_POW = 27;
+let level = 0, strokes = 0, state = 'ready'; // ready | flying | clear
+let planetMeshes = [], goalMesh = null, goalPos = new THREE.Vector3();
+const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 24, 18),
+  new THREE.MeshStandardMaterial({color:0xffffff, roughness:.25, metalness:.1, emissive:0x222233}));
+scene.add(ball);
+const vel = new THREE.Vector3();
+let lastShotPos = new THREE.Vector3();
+
+function gravityAt(p){
+  const a = new THREE.Vector3();
+  for(const pl of curPlanets){
+    const d = new THREE.Vector3(pl.x - p.x, 0, pl.z - p.z);
+    const dist = Math.max(d.length(), pl.r*0.9);
+    a.add(d.normalize().multiplyScalar(G * pl.r * pl.r / (dist*dist)));
+  }
+  return a;
+}
+let curPlanets = [];
+
+function loadLevel(i){
+  planetMeshes.forEach(m=>scene.remove(m));
+  if(goalMesh) scene.remove(goalMesh);
+  planetMeshes = [];
+  const L = LEVELS[i];
+  curPlanets = L.planets;
+  for(const pl of L.planets){
+    const grp = new THREE.Group();
+    const m = new THREE.Mesh(new THREE.SphereGeometry(pl.r, 36, 28),
+      new THREE.MeshStandardMaterial({color:pl.c, roughness:.7}));
+    grp.add(m);
+    const halo = new THREE.Mesh(new THREE.RingGeometry(pl.r*1.25, pl.r*1.32, 48),
+      new THREE.MeshBasicMaterial({color:pl.c, transparent:true, opacity:.3, side:THREE.DoubleSide}));
+    halo.rotation.x = -Math.PI/2;
+    grp.add(halo);
+    grp.position.set(pl.x, 0, pl.z);
+    scene.add(grp);
+    planetMeshes.push(grp);
+  }
+  goalPos.set(L.goal.x, 0, L.goal.z);
+  goalMesh = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5, .14, 12, 40),
+    new THREE.MeshStandardMaterial({color:0x40ff9f, emissive:0x1a8f55, roughness:.3}));
+  ring.rotation.x = Math.PI/2;
+  goalMesh.add(ring);
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,9,8),
+    new THREE.MeshBasicMaterial({color:0x40ff9f, transparent:true, opacity:.35}));
+  beam.position.y = 4.5;
+  goalMesh.add(beam);
+  goalMesh.position.copy(goalPos);
+  scene.add(goalMesh);
+
+  ball.position.set(L.start.x, 0, L.start.z);
+  lastShotPos.copy(ball.position);
+  vel.set(0,0,0);
+  state = 'ready';
+  document.getElementById('lv').textContent = i+1;
+}
+function showMsg(t, ms){
+  const el = document.getElementById('msg');
+  el.textContent = t; el.style.opacity = 1;
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.style.opacity=0, ms||1600);
+}
+
+// ---------- 조준 (새총) ----------
+const aimDots = [];
+for(let i=0;i<46;i++){
+  const d = new THREE.Mesh(new THREE.SphereGeometry(.16,8,6),
+    new THREE.MeshBasicMaterial({color:0xffffff, transparent:true, opacity:0}));
+  scene.add(d); aimDots.push(d);
+}
+let aiming = false, ax0=0, ay0=0, aimVel = new THREE.Vector3();
+
+function pointerToVel(e){
+  const dx = ax0 - e.clientX, dy = ay0 - e.clientY;
+  const v = new THREE.Vector3(dx*0.07, 0, dy*0.07);
+  if(v.length() > MAX_POW) v.setLength(MAX_POW);
+  return v;
+}
+addEventListener('pointerdown', e=>{
+  if(state!=='ready' || e.target.tagName==='A') return;
+  aiming = true; ax0 = e.clientX; ay0 = e.clientY;
+});
+addEventListener('pointermove', e=>{
+  if(!aiming) return;
+  aimVel.copy(pointerToVel(e));
+  // 예측 궤도
+  const p = ball.position.clone(), v = aimVel.clone();
+  const dt = 1/60;
+  let di = 0;
+  for(let s=0; s<420 && di<aimDots.length; s++){
+    v.add(gravityAt(p).multiplyScalar(dt));
+    p.add(v.clone().multiplyScalar(dt));
+    if(s % 9 === 0){
+      aimDots[di].position.copy(p);
+      aimDots[di].material.opacity = .85 * (1 - di/aimDots.length);
+      di++;
+    }
+    if(hitPlanet(p) || Math.abs(p.x)>46 || Math.abs(p.z)>32) break;
+  }
+  for(let i=di;i<aimDots.length;i++) aimDots[i].material.opacity = 0;
+});
+addEventListener('pointerup', ()=>{
+  if(!aiming) return;
+  aiming = false;
+  aimDots.forEach(d=>d.material.opacity=0);
+  if(aimVel.length() < 1.5) return; // 너무 약하면 취소
+  lastShotPos.copy(ball.position);
+  vel.copy(aimVel);
+  aimVel.set(0,0,0);
+  strokes++;
+  document.getElementById('st').textContent = strokes;
+  state = 'flying';
+});
+
+function hitPlanet(p){
+  for(const pl of curPlanets){
+    if(Math.hypot(p.x-pl.x, p.z-pl.z) < pl.r + BALL_R) return pl;
+  }
+  return null;
+}
+
+// ---------- 루프 ----------
+let last = performance.now();
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last = now;
+  goalMesh.rotation.y += dt*1.5;
+  planetMeshes.forEach((m,i)=>m.rotation.y += dt*(.2+i*.07));
+
+  if(state==='flying'){
+    vel.add(gravityAt(ball.position).multiplyScalar(dt));
+    ball.position.add(vel.clone().multiplyScalar(dt));
+    const pl = hitPlanet(ball.position);
+    if(pl){ // 행성 표면에 착지
+      const d = new THREE.Vector3(ball.position.x-pl.x, 0, ball.position.z-pl.z).normalize();
+      ball.position.set(pl.x + d.x*(pl.r+BALL_R+.05), 0, pl.z + d.z*(pl.r+BALL_R+.05));
+      vel.set(0,0,0);
+      state = 'ready';
+      showMsg('🪐 행성에 착지! 여기서 다시 치세요');
+    } else if(Math.abs(ball.position.x)>46 || Math.abs(ball.position.z)>32){
+      ball.position.copy(lastShotPos);
+      vel.set(0,0,0);
+      state = 'ready';
+      showMsg('🌌 우주 미아! 제자리에서 다시');
+    } else if(ball.position.distanceTo(goalPos) < 1.5){
+      state = 'clear';
+      showMsg(level < LEVELS.length-1 ? '⛳ 홀인! 다음 레벨로...' : `🏆 전 코스 클리어! 총 ${strokes}타`, 2500);
+      setTimeout(()=>{
+        if(level < LEVELS.length-1){ level++; loadLevel(level); }
+        else { level = 0; strokes = 0; document.getElementById('st').textContent = 0; loadLevel(0); }
+      }, 1800);
+    }
+  }
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+loadLevel(0);
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

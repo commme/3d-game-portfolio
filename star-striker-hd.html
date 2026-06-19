@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>스타 스트라이커 HD — 고도화 데모</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',sans-serif;cursor:crosshair;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#cfe6ff;
+       font-size:16px;letter-spacing:1px;text-shadow:0 0 10px #2a6cff;white-space:nowrap;z-index:5;}
+  #hp{color:#ff7a9c;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.5);font-size:12px;white-space:nowrap;z-index:5;}
+  #back{position:fixed;top:14px;left:14px;color:#9bd;text-decoration:none;font-size:13px;
+        background:rgba(10,20,50,.7);padding:7px 12px;border-radius:18px;z-index:5;}
+  #badge{position:fixed;top:14px;right:14px;color:#ffe9a8;font-size:11px;z-index:5;
+         background:rgba(40,30,10,.6);padding:6px 11px;border-radius:14px;border:1px solid rgba(255,210,100,.4);}
+  #over{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;background:rgba(0,0,8,.62);color:#fff;z-index:6;}
+  #over h2{font-size:38px;margin:0;color:#ff3d6e;text-shadow:0 0 22px #ff3d6e;}
+  #over p{color:#9cf;font-size:18px;}
+  #over button{font-size:16px;padding:10px 30px;border:1px solid #9cf;border-radius:24px;
+               background:transparent;color:#9cf;cursor:pointer;}
+  #over button:hover{background:rgba(150,200,255,.14);}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+        background:#03030a;color:#7ec8ff;font-size:16px;letter-spacing:2px;z-index:9;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="badge">✨ HD: 블룸 · 환경반사 · 절차텍스처 · PBR</div>
+<div id="hud">SCORE <span id="sc">0</span> &nbsp;·&nbsp; WAVE <span id="wv">1</span> &nbsp;·&nbsp; <span id="hp">❤❤❤</span></div>
+<div id="hint">←→↑↓ (WASD) 기동 · 스페이스/클릭 연사 · 빛나는 운석과 UFO를 격추하라</div>
+<div id="over"><h2>SHIP DESTROYED</h2><p>SCORE <span id="fsc">0</span></p><button id="retry">재출격 (R)</button></div>
+<div id="load">엔진 워밍업 중...</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// ===== 렌더러: 톤매핑(ACES) + 그림자 =====
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // [기법1] 시네마틱 톤매핑
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(65, innerWidth/innerHeight, .1, 600);
+
+// ===== [기법2] 환경광: RoomEnvironment로 PBR 반사 생성 =====
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+scene.add(new THREE.AmbientLight(0x3a4a66, 1.0));
+const key = new THREE.DirectionalLight(0xbcd6ff, 2.2);
+key.position.set(12, 22, 14);
+key.castShadow = true;
+key.shadow.mapSize.set(1024,1024);
+scene.add(key);
+const rim = new THREE.PointLight(0x6a3cff, 3, 120);
+rim.position.set(-20, 6, -30);
+scene.add(rim);
+
+// ===== [기법3] 절차적 텍스처 생성 (canvas → CanvasTexture) =====
+function makeNebula(){
+  const c = document.createElement('canvas'); c.width = c.height = 1024;
+  const x = c.getContext('2d');
+  x.fillStyle = '#05030f'; x.fillRect(0,0,1024,1024);
+  const blobs = [['#3a1d6e',.0],['#0e2f6b',.0],['#5e1644',.0],['#123a4a',.0]];
+  for(let i=0;i<5;i++){
+    const cx=Math.random()*1024, cy=Math.random()*1024, r=200+Math.random()*360;
+    const col = ['#3a1d6e','#0e2f6b','#5e1644','#123a4a','#2a1a55'][i];
+    const g = x.createRadialGradient(cx,cy,0,cx,cy,r);
+    g.addColorStop(0, col); g.addColorStop(1, 'rgba(5,3,15,0)');
+    x.globalAlpha = .55; x.fillStyle = g; x.fillRect(0,0,1024,1024);
+  }
+  x.globalAlpha = 1;
+  for(let i=0;i<1400;i++){
+    const s = Math.random()*1.6;
+    x.fillStyle = `rgba(255,255,255,${.3+Math.random()*.7})`;
+    x.fillRect(Math.random()*1024, Math.random()*1024, s, s);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  return t;
+}
+function makeRock(){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#6b5e50'; x.fillRect(0,0,256,256);
+  for(let i=0;i<9000;i++){
+    const v = 60 + Math.random()*120;
+    x.fillStyle = `rgb(${v*.9|0},${v*.8|0},${v*.7|0})`;
+    x.fillRect(Math.random()*256, Math.random()*256, 2, 2);
+  }
+  for(let i=0;i<40;i++){
+    x.fillStyle = `rgba(20,15,10,${Math.random()*.5})`;
+    x.beginPath(); x.arc(Math.random()*256,Math.random()*256,4+Math.random()*14,0,7); x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+const nebula = makeNebula();
+const rockTex = makeRock();
+scene.background = nebula;   // [기법2] 성운 스카이박스 배경
+
+// 추가 스타필드 (입체감)
+(function(){
+  const g = new THREE.BufferGeometry(), v=[];
+  for(let i=0;i<600;i++) v.push((Math.random()-.5)*200,(Math.random()-.5)*120,-Math.random()*260);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xbcd0ff, size:.5})));
+})();
+
+// ===== [기법3+4] 디테일 PBR 함선 모델 (다중 파트 + 금속 재질 + 발광) =====
+const ship = new THREE.Group();
+const metal = new THREE.MeshStandardMaterial({ color:0x2f5fd0, roughness:.25, metalness:.95, envMapIntensity:1.4 });
+const glass = new THREE.MeshStandardMaterial({ color:0x9adfff, roughness:.05, metalness:.3, emissive:0x113355, emissiveIntensity:.5 });
+const hull = new THREE.Mesh(new THREE.ConeGeometry(.72, 2.8, 24), metal);
+hull.rotation.x = -Math.PI/2; hull.castShadow = true;
+const wing = new THREE.Mesh(new THREE.BoxGeometry(3.4,.16,1.1), metal);
+wing.position.z = .6; wing.castShadow = true;
+const wingEdge = new THREE.Mesh(new THREE.BoxGeometry(3.6,.06,.18),
+  new THREE.MeshStandardMaterial({color:0x66ffd5, emissive:0x33ffbb, emissiveIntensity:2.2, roughness:.4}));
+wingEdge.position.set(0,.06,1.1);
+const cockpit = new THREE.Mesh(new THREE.SphereGeometry(.34,18,12), glass);
+cockpit.position.set(0,.18,-.2); cockpit.scale.z = 1.4;
+const engineGlow = new THREE.Mesh(new THREE.SphereGeometry(.34,16,12),
+  new THREE.MeshStandardMaterial({color:0x66aaff, emissive:0x3aa0ff, emissiveIntensity:3, roughness:.5}));
+engineGlow.position.z = 1.5; engineGlow.scale.set(.8,.8,1.4);
+const eLight = new THREE.PointLight(0x66aaff, 4, 14);
+eLight.position.z = 1.7;
+ship.add(hull, wing, wingEdge, cockpit, engineGlow, eLight);
+scene.add(ship);
+
+// ===== 상태 =====
+const lasers = [], enemies = [], parts = [];
+let score, hp, wave, spawnT, running, fireT = 0;
+const keys = {}; let firing = false;
+addEventListener('keydown', e=>{ keys[e.code]=true; if(e.code==='Space'){e.preventDefault(); firing=true;} if(e.code==='KeyR'&&!running) restart(); });
+addEventListener('keyup', e=>{ keys[e.code]=false; if(e.code==='Space') firing=false; });
+addEventListener('pointerdown', e=>{ if(e.target.tagName!=='A'&&e.target.tagName!=='BUTTON') firing=true; });
+addEventListener('pointerup', ()=>firing=false);
+document.getElementById('retry').onclick = ()=>restart();
+
+// 발광 레이저 (블룸으로 빛남)
+const laserGeo = new THREE.CapsuleGeometry(.09, 2.2, 4, 8);
+const laserMat = new THREE.MeshStandardMaterial({ color:0x88ffcc, emissive:0x33ffaa, emissiveIntensity:4, roughness:.3 });
+function shoot(){
+  for(const dx of [-0.95, 0.95]){
+    const m = new THREE.Mesh(laserGeo, laserMat);
+    m.rotation.x = Math.PI/2;
+    m.position.set(ship.position.x+dx, ship.position.y, ship.position.z-1.2);
+    scene.add(m); lasers.push(m);
+  }
+}
+
+function spawnEnemy(){
+  const ufo = Math.random() < .3;
+  let m, r, hpE, pts;
+  if(ufo){
+    const g = new THREE.Group();
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,.4,24),
+      new THREE.MeshStandardMaterial({color:0x8a3cff, roughness:.2, metalness:.9, envMapIntensity:1.5}));
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(.72,18,12,0,Math.PI*2,0,Math.PI/2),
+      new THREE.MeshStandardMaterial({color:0xeeccff, roughness:.05, metalness:.2, emissive:0x6a22aa, emissiveIntensity:1.2}));
+    dome.position.y = .2;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.5,.09,8,32),
+      new THREE.MeshStandardMaterial({color:0xff66dd, emissive:0xff33cc, emissiveIntensity:2.5, roughness:.4}));
+    ring.rotation.x = Math.PI/2;
+    g.add(disc, dome, ring);
+    g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+    m = g; r = 1.7; hpE = 2; pts = 150;
+  } else {
+    m = new THREE.Mesh(new THREE.IcosahedronGeometry(.9+Math.random()*.9, 1),
+      new THREE.MeshStandardMaterial({ map:rockTex, roughness:1, metalness:.05, flatShading:true,
+        bumpMap:rockTex, bumpScale:.4 }));
+    m.castShadow = true;
+    r = m.geometry.parameters.radius; hpE = 1; pts = 50;
+  }
+  m.position.set((Math.random()-.5)*30, (Math.random()-.5)*14, -180);
+  scene.add(m);
+  enemies.push({ m, r, hp:hpE, pts, ufo, sway:Math.random()*6,
+    sp: 22 + wave*2.5 + Math.random()*8, rx:(Math.random()-.5)*2, ry:(Math.random()-.5)*2 });
+}
+
+function explode(p, c, n){
+  for(let i=0;i<n;i++){
+    const m = new THREE.Mesh(new THREE.BoxGeometry(.24,.24,.24),
+      new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:2.5, transparent:true}));
+    m.position.copy(p);
+    const v = new THREE.Vector3((Math.random()-.5)*18,(Math.random()-.5)*18,(Math.random()-.5)*18);
+    scene.add(m); parts.push({m, v, life:.7});
+  }
+}
+
+function restart(){
+  lasers.forEach(l=>scene.remove(l)); lasers.length=0;
+  enemies.forEach(e=>scene.remove(e.m)); enemies.length=0;
+  parts.forEach(p=>scene.remove(p.m)); parts.length=0;
+  score=0; hp=3; wave=1; spawnT=0; running=true;
+  ship.position.set(0,0,14);
+  document.getElementById('sc').textContent=0;
+  document.getElementById('wv').textContent=1;
+  document.getElementById('hp').textContent='❤❤❤';
+  document.getElementById('over').style.display='none';
+}
+function hitShip(){
+  hp--;
+  document.getElementById('hp').textContent = '❤'.repeat(Math.max(0,hp));
+  explode(ship.position, 0xff6688, 26);
+  if(hp<=0){ running=false; document.getElementById('fsc').textContent=score; document.getElementById('over').style.display='flex'; }
+}
+
+// ===== [기법1] 후처리 컴포저: RenderPass + Bloom + OutputPass =====
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.85, 0.45, 0.82);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+document.getElementById('load').style.display = 'none';
+restart();
+
+let last = performance.now(), T=0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last=now;
+  T += dt;
+
+  if(running){
+    const sp = 18;
+    if(keys.ArrowLeft||keys.KeyA) ship.position.x -= sp*dt;
+    if(keys.ArrowRight||keys.KeyD) ship.position.x += sp*dt;
+    if(keys.ArrowUp||keys.KeyW) ship.position.y += sp*dt*.8;
+    if(keys.ArrowDown||keys.KeyS) ship.position.y -= sp*dt*.8;
+    ship.position.x = Math.max(-16, Math.min(16, ship.position.x));
+    ship.position.y = Math.max(-8, Math.min(8, ship.position.y));
+    ship.rotation.z = ((keys.ArrowLeft||keys.KeyA)?.4:0) - ((keys.ArrowRight||keys.KeyD)?.4:0);
+    ship.rotation.x = ((keys.ArrowUp||keys.KeyW)?-.2:0) + ((keys.ArrowDown||keys.KeyS)?.2:0);
+    engineGlow.material.emissiveIntensity = 2.5 + Math.sin(T*20)*.8;
+
+    fireT -= dt;
+    if(firing && fireT<=0){ shoot(); fireT = .16; }
+
+    for(let i=lasers.length-1;i>=0;i--){
+      lasers[i].position.z -= 95*dt;
+      if(lasers[i].position.z < -190){ scene.remove(lasers[i]); lasers.splice(i,1); }
+    }
+
+    spawnT -= dt;
+    if(spawnT<=0){ spawnEnemy(); spawnT = Math.max(.25, 1.1 - wave*.09); }
+    wave = 1 + Math.floor(score/1000);
+    document.getElementById('wv').textContent = wave;
+
+    for(let i=enemies.length-1;i>=0;i--){
+      const e = enemies[i];
+      e.m.position.z += e.sp*dt;
+      if(e.ufo){ e.sway += dt*2; e.m.position.x += Math.sin(e.sway)*dt*8; e.m.rotation.y += dt*2; }
+      else { e.m.rotation.x += e.rx*dt; e.m.rotation.y += e.ry*dt; }
+      let killed = false;
+      for(let j=lasers.length-1;j>=0;j--){
+        if(lasers[j].position.distanceTo(e.m.position) < e.r+.6){
+          scene.remove(lasers[j]); lasers.splice(j,1);
+          e.hp--; explode(e.m.position, 0xffffaa, 6);
+          if(e.hp<=0){ explode(e.m.position, e.ufo?0xc77dff:0xff9f45, 20); score += e.pts;
+            document.getElementById('sc').textContent = score; killed = true; }
+          break;
+        }
+      }
+      if(killed){ scene.remove(e.m); enemies.splice(i,1); continue; }
+      if(e.m.position.z > 11 && e.m.position.distanceTo(ship.position) < e.r+1.2){
+        scene.remove(e.m); enemies.splice(i,1); hitShip(); continue;
+      }
+      if(e.m.position.z > 24){ scene.remove(e.m); enemies.splice(i,1); }
+    }
+  }
+
+  for(let i=parts.length-1;i>=0;i--){
+    const p = parts[i]; p.life -= dt; p.v.multiplyScalar(.96);
+    p.m.position.add(p.v.clone().multiplyScalar(dt));
+    p.m.material.opacity = Math.max(0, p.life/.7);
+    p.m.rotation.x += dt*4;
+    if(p.life<=0){ scene.remove(p.m); parts.splice(i,1); }
+  }
+
+  scene.rotation.z = Math.sin(T*.05)*.01;
+  camera.position.set(ship.position.x*.4, ship.position.y*.4+2.5, 24);
+  camera.lookAt(ship.position.x*.6, ship.position.y*.6, -30);
+
+  composer.render();   // 후처리 파이프라인으로 렌더
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

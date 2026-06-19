@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+*~
+
+# 임시/로그
+*.log
+*.tmp
+node_modules/
+
+# 빌드 산출물 (현재는 없음)
+dist/
+build/

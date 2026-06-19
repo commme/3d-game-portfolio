@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D GAME PORTFOLIO</title>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;background:#0b0d1a;color:#e8ecf8;
+       font-family:'Segoe UI','Malgun Gothic',sans-serif;overflow-x:hidden;}
+  .blob{position:fixed;border-radius:50%;filter:blur(110px);opacity:.35;z-index:0;pointer-events:none;}
+  .b1{width:480px;height:480px;background:#3b2f8f;top:-140px;left:-120px;}
+  .b2{width:420px;height:420px;background:#0f4d5c;bottom:-120px;right:-100px;}
+  .b3{width:300px;height:300px;background:#6e2350;top:40%;left:55%;}
+
+  header{position:relative;z-index:1;text-align:center;padding:64px 20px 28px;}
+  h1{font-size:clamp(30px,5vw,52px);margin:0;letter-spacing:6px;
+     background:linear-gradient(90deg,#7ec8ff,#c77dff,#ff8fab);
+     -webkit-background-clip:text;background-clip:text;color:transparent;}
+  header p{color:#8a93b8;margin:14px 0 0;font-size:15px;letter-spacing:1px;}
+  .toplinks{margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .toplinks a{text-decoration:none;font-size:13.5px;font-weight:bold;padding:10px 20px;border-radius:22px;
+     color:#e8ecf8;background:rgba(40,48,90,.6);border:1px solid rgba(130,150,220,.3);transition:.2s;}
+  .toplinks a:hover{background:rgba(70,90,160,.65);transform:translateY(-2px);}
+  .toplinks a.guide{background:linear-gradient(90deg,#ffb347,#ff7a3a);color:#241400;border:none;}
+  .toplinks a.guide:hover{filter:brightness(1.1);}
+
+  .grid{position:relative;z-index:1;max-width:1240px;margin:30px auto 80px;padding:0 24px;
+        display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:24px;}
+  .card{position:relative;background:rgba(22,26,48,.75);border:1px solid rgba(130,150,220,.18);
+        border-radius:18px;overflow:hidden;backdrop-filter:blur(8px);
+        transition:transform .25s, box-shadow .25s;display:flex;flex-direction:column;}
+  .card:hover{transform:translateY(-7px);box-shadow:0 18px 44px rgba(0,0,0,.5);}
+  .new{position:absolute;top:12px;right:12px;background:#ff3d6e;color:#fff;font-size:11px;
+       font-weight:bold;padding:3px 10px;border-radius:12px;letter-spacing:1px;z-index:2;
+       box-shadow:0 0 12px rgba(255,61,110,.6);}
+  .banner{height:118px;display:flex;align-items:center;justify-content:center;font-size:52px;}
+  .g1 .banner{background:radial-gradient(circle at 30% 30%,#2a2070,#0a0a2a);}
+  .g2 .banner{background:linear-gradient(135deg,#2e7d32,#8bc34a 60%,#ffd93d);}
+  .g3 .banner{background:linear-gradient(180deg,#0a0a14,#1a0533 70%,#33112a);}
+  .g4 .banner{background:linear-gradient(135deg,#1a1a2e,#24304a 70%,#3d6db5);}
+  .g5 .banner{background:linear-gradient(180deg,#6ec6ff,#8fd4ff 55%,#6abf5e 56%,#4a9f4e);}
+  .g6 .banner{background:radial-gradient(circle at 70% 60%,#23123f,#05050f);}
+  .g7 .banner{background:linear-gradient(180deg,#0a6a8e,#04445e 70%,#06303f);}
+  .g8 .banner{background:radial-gradient(circle at 50% 40%,#3a2f10,#0c0b06);}
+  .g9 .banner{background:linear-gradient(135deg,#b8a8e8,#ffc4d6 60%,#8ec8e8);}
+  .g10 .banner{background:linear-gradient(135deg,#0a0e2a,#15355a 70%,#1d3a2f);}
+  .body{padding:16px 20px 20px;display:flex;flex-direction:column;flex:1;}
+  .tags{display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap;}
+  .tag{font-size:11px;padding:3px 10px;border-radius:12px;background:rgba(126,200,255,.12);
+       color:#7ec8ff;border:1px solid rgba(126,200,255,.25);}
+  .tag.up{background:rgba(255,159,69,.15);color:#ffb877;border-color:rgba(255,159,69,.35);}
+  h2{margin:0 0 7px;font-size:19px;}
+  .desc{color:#aab3d6;font-size:13px;line-height:1.6;margin:0 0 9px;flex:1;}
+  .ctrl{color:#788;font-size:12px;margin:0 0 14px;}
+  .ctrl b{color:#9ab;}
+  .btns{display:flex;gap:8px;}
+  a.play{flex:1;display:block;text-align:center;text-decoration:none;padding:10px;
+         border-radius:12px;font-weight:bold;font-size:14px;color:#fff;
+         background:linear-gradient(90deg,#4d96ff,#c77dff);transition:filter .2s, transform .15s;}
+  a.play:hover{filter:brightness(1.2);transform:translateY(-1px);}
+  a.play.up{background:linear-gradient(90deg,#ff9f45,#ff5a8a);}
+  footer{position:relative;z-index:1;text-align:center;color:#566;font-size:12px;padding:0 0 36px;}
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+<header>
+  <h1>3D GAME PORTFOLIO</h1>
+  <p>Three.js로 만든 신박한 3D 게임 10선 — 일부는 기본·업그레이드 2버전으로 즐겨보세요</p>
+  <div class="toplinks">
+    <a class="guide" href="upgrade-guide.html">📘 비주얼 고도화 가이드</a>
+    <a href="model-gallery.html">🖼️ 3D 모델 갤러리</a>
+  </div>
+</header>
+
+<div class="grid">
+
+  <div class="card g5">
+    <span class="new">NEW</span>
+    <div class="banner">🍄🏁</div>
+    <div class="body">
+      <div class="tags"><span class="tag">플랫포머</span><span class="tag">마리오풍</span><span class="tag up">✨ 업그레이드판</span></div>
+      <h2>점프 아일랜드</h2>
+      <p class="desc">하늘에 떠 있는 섬들을 점프로 건너는 정통 3D 플랫포머.
+        움직이는 발판, 빙글빙글 도는 코인, 그리고 머리 위로 밟아야만 잡을 수 있는 보라색 몬스터까지.
+        코인을 전부 모으고 깃발에 닿으면 퍼펙트 보너스!</p>
+      <p class="ctrl"><b>조작</b> WASD/방향키 이동 · 스페이스 점프 · 적은 밟기</p>
+      <div class="btns">
+        <a class="play" href="jump-island.html">▶ 기본</a>
+        <a class="play up" href="jump-island-gltf.html">✨ 업그레이드(GLTF)</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card g6">
+    <span class="new">NEW</span>
+    <div class="banner">🛸💥</div>
+    <div class="body">
+      <div class="tags"><span class="tag">슈팅</span><span class="tag">아케이드</span><span class="tag up">✨ 업그레이드판</span></div>
+      <h2>스타 스트라이커</h2>
+      <p class="desc">쏟아지는 운석 지대를 뚫는 우주 전투기.
+        쌍발 레이저로 운석을 부수고, 좌우로 흔들리며 접근하는 UFO를 격추하라.
+        웨이브가 오를수록 적이 빨라지는 정통 탄막 아케이드.</p>
+      <p class="ctrl"><b>조작</b> WASD/방향키 기동 · 스페이스/클릭 연사</p>
+      <div class="btns">
+        <a class="play" href="star-striker.html">▶ 기본</a>
+        <a class="play up" href="star-striker-hd.html">✨ 업그레이드(HD)</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="card g7">
+    <span class="new">NEW</span>
+    <div class="banner">🤿🦪</div>
+    <div class="body">
+      <div class="tags"><span class="tag">물</span><span class="tag">탐험</span><span class="tag">서바이벌</span></div>
+      <h2>딥 블루</h2>
+      <p class="desc">노란 꼬마 잠수함을 타고 심해로.
+        산소는 계속 줄어들고, 진주를 주울 때마다 숨이 연장되는 긴장감의 루프.
+        흔들리는 해초와 물고기 떼 사이, 반투명하게 일렁이는 해파리를 스치면 산소가 깎인다.
+        진주 12개를 모아 보물왕이 되자.</p>
+      <p class="ctrl"><b>조작</b> ↑↓ 전진/후진 · ←→ 선회 · 스페이스 상승 · Shift 하강</p>
+      <div class="btns"><a class="play" href="deep-blue.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g8">
+    <span class="new">NEW</span>
+    <div class="banner">💡🔮</div>
+    <div class="body">
+      <div class="tags"><span class="tag">빛</span><span class="tag">퍼즐</span><span class="tag">두뇌</span></div>
+      <h2>루멘</h2>
+      <p class="desc">어둠 속 잠든 수정을 깨우는 빛의 퍼즐.
+        거울을 클릭해 45° 회전시키고, 황금빛 레이저를 차단벽 사이로 굴절시켜
+        수정까지 인도하라. 빛이 닿는 순간 수정이 깨어나는 연출이 백미. 5개의 퍼즐.</p>
+      <p class="ctrl"><b>조작</b> 거울 클릭으로 회전</p>
+      <div class="btns"><a class="play" href="lumen.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g9">
+    <span class="new">NEW</span>
+    <div class="banner">😴⭐</div>
+    <div class="body">
+      <div class="tags"><span class="tag">꿈</span><span class="tag">힐링</span><span class="tag">무한 낙하</span></div>
+      <h2>드림 폴</h2>
+      <p class="desc">잠든 꼬마가 꿈속으로 끝없이 떨어진다.
+        파스텔빛 하늘이 깊이에 따라 색을 바꾸고, 구름과 문짝과 고래가 둥둥 떠다니는 초현실 낙하.
+        꿈 조각(⭐)을 모으되, 부들부들 떨고 있는 알람시계에 3번 닿으면... 기상이다.</p>
+      <p class="ctrl"><b>조작</b> WASD/방향키로 떠다니기</p>
+      <div class="btns"><a class="play" href="dream-fall.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g10">
+    <span class="new">NEW</span>
+    <div class="banner">📷🧺</div>
+    <div class="body">
+      <div class="tags"><span class="tag">모션 인식</span><span class="tag">웹캠</span><span class="tag">체감형</span></div>
+      <h2>모션 캐처</h2>
+      <p class="desc">키보드를 버려라 — 몸이 컨트롤러다.
+        웹캠이 당신의 움직임을 감지해, 손을 좌우로 흔들면 바구니가 따라 움직인다.
+        밤하늘에서 떨어지는 별은 받고 폭탄은 피하기.
+        카메라가 없으면 키보드로도 플레이 가능.</p>
+      <p class="ctrl"><b>조작</b> 몸/손 좌우 이동 (카메라 허용) · ←→ 보조</p>
+      <div class="btns"><a class="play" href="motion-catch.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g1">
+    <div class="banner">🪐⛳</div>
+    <div class="body">
+      <div class="tags"><span class="tag">중력</span><span class="tag">퍼즐</span><span class="tag">슬링샷</span></div>
+      <h2>오르빗 퍼트</h2>
+      <p class="desc">우주에서 치는 골프. 직선으로는 절대 홀에 닿을 수 없다 —
+        행성의 중력에 공을 맡겨 궤도를 휘감아 홀인하라.
+        당기면 예측 궤도가 점선으로 그려지고, 행성에 착지해 중간 기착하는 전략도 가능. 4개 코스.</p>
+      <p class="ctrl"><b>조작</b> 드래그로 당겼다 놓기 (새총)</p>
+      <div class="btns"><a class="play" href="orbit-putt.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g2">
+    <div class="banner">🟠🏠</div>
+    <div class="body">
+      <div class="tags"><span class="tag">액션</span><span class="tag">수집</span><span class="tag">스노우볼링</span></div>
+      <h2>먹깨비 볼</h2>
+      <p class="desc">구르면 구를수록 커지는 먹깨비.
+        사탕 → 버섯 → 상자 → 나무 → 자동차 → 집 순으로 몸집이 커질수록 삼킬 수 있는 게 늘어난다.
+        삼킨 물건이 몸에 그대로 박혀 굴러다니는 비주얼이 포인트. 목표: 마을 정복.</p>
+      <p class="ctrl"><b>조작</b> ↑↓ 이동 · ←→ 카메라 회전 (WASD 가능)</p>
+      <div class="btns"><a class="play" href="devour-ball.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g3">
+    <div class="banner">🚀🌀</div>
+    <div class="body">
+      <div class="tags"><span class="tag">러닝</span><span class="tag">아케이드</span><span class="tag">중력 플립</span></div>
+      <h2>네온 튜브</h2>
+      <p class="desc">네온 터널 속을 질주하는 호버 셔틀.
+        점프는 없다 — 중력을 비틀어 터널 벽면 360°를 자유롭게 달린다.
+        내가 도는 게 아니라 세상이 도는 듯한 회전 연출과 점점 빨라지는 속도감이 핵심.</p>
+      <p class="ctrl"><b>조작</b> ←→ 중력 비틀기 · R 재시작</p>
+      <div class="btns"><a class="play" href="neon-tube.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+  <div class="card g4">
+    <div class="banner">🧊💥</div>
+    <div class="body">
+      <div class="tags"><span class="tag">샌드박스</span><span class="tag">물리 엔진</span><span class="tag">보너스</span></div>
+      <h2>3D 물리 샌드박스</h2>
+      <p class="desc">규칙도 목표도 없는 물리 놀이터.
+        상자·공·원기둥을 떨어뜨리고, 탑을 쌓고, 폭발시키고,
+        중력을 0까지 낮춰 무중력 놀이까지. cannon.js 물리 엔진 기반 자유 실험 공간.</p>
+      <p class="ctrl"><b>조작</b> 클릭 생성 · 드래그 회전 · 스페이스 발사</p>
+      <div class="btns"><a class="play" href="sandbox3d.html">▶ 플레이</a></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>Made with Three.js · 단일 HTML 파일, 설치 불필요 · 모든 파일을 같은 폴더에 두고 실행하세요</footer>
+</body>
+</html>

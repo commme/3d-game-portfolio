@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>점프 아일랜드 — 3D 플랫포머</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#7ec8ff;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#234;
+       background:rgba(255,255,255,.85);padding:8px 24px;border-radius:24px;font-size:15px;
+       box-shadow:0 2px 12px rgba(0,0,0,.15);white-space:nowrap;}
+  #hud b{color:#e8590c;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(0,0,0,.45);font-size:12px;background:rgba(255,255,255,.6);
+        padding:6px 14px;border-radius:20px;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#345;text-decoration:none;font-size:13px;
+        background:rgba(255,255,255,.8);padding:7px 12px;border-radius:18px;}
+  #win{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+       flex-direction:column;gap:14px;background:rgba(0,0,0,.45);color:#fff;font-size:34px;font-weight:bold;}
+  #win button{font-size:16px;padding:10px 26px;border:none;border-radius:24px;background:#e8590c;color:#fff;cursor:pointer;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">🪙 <b id="coin">0</b>/<span id="ctot">0</span> &nbsp;·&nbsp; 점수 <b id="score">0</b></div>
+<div id="hint">←→↑↓ (WASD) 이동 · 스페이스 점프 · 적은 밟아서 처치! · 떨어지면 처음부터</div>
+<div id="win"><span id="wmsg">🏁 클리어!</span><button onclick="location.reload()">다시 하기</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fd4ff);
+scene.fog = new THREE.Fog(0x8fd4ff, 50, 130);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .1, 300);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xffffff,.6));
+const sun = new THREE.DirectionalLight(0xfff5dd,.95);
+sun.position.set(30,50,20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-60; sun.shadow.camera.right=80;
+sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60;
+scene.add(sun);
+
+// 구름 장식
+for(let i=0;i<14;i++){
+  const c = new THREE.Group();
+  for(let j=0;j<3;j++){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(1.6+Math.random(),10,8),
+      new THREE.MeshStandardMaterial({color:0xffffff, roughness:1}));
+    s.position.set(j*1.8-1.8, Math.random()*.5, Math.random());
+    c.add(s);
+  }
+  c.position.set(Math.random()*100-10, 14+Math.random()*10, -20-Math.random()*25);
+  scene.add(c);
+}
+
+// ---------- 플랫폼 ----------
+const PLATS = [
+  {x:0,  y:0, z:0, w:9, d:9},
+  {x:11, y:1, z:-2, w:4, d:4},
+  {x:19, y:2, z:2,  w:4, d:4},
+  {x:27, y:3, z:-1, w:3, d:3, move:{axis:'z', amp:4, sp:1.1}},
+  {x:35, y:4, z:0,  w:5, d:5},
+  {x:43, y:4, z:5,  w:3, d:3, move:{axis:'y', amp:2, sp:1.4}},
+  {x:51, y:5, z:0,  w:5, d:5},
+  {x:60, y:6, z:-3, w:3, d:3, move:{axis:'x', amp:3, sp:.9}},
+  {x:70, y:7, z:0,  w:10, d:10},
+];
+const platMeshes = [];
+const GREENS = [0x6abf5e, 0x5fb157, 0x74c969];
+PLATS.forEach((p,i)=>{
+  p.x0=p.x; p.y0=p.y; p.z0=p.z;
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(p.w, .6, p.d),
+    new THREE.MeshStandardMaterial({color:GREENS[i%3], roughness:.85}));
+  top.position.y = -.3;
+  const dirt = new THREE.Mesh(new THREE.BoxGeometry(p.w*.92, 1.6, p.d*.92),
+    new THREE.MeshStandardMaterial({color:0x8a5a33, roughness:.95}));
+  dirt.position.y = -1.4;
+  g.add(top, dirt);
+  g.traverse(o=>{if(o.isMesh){o.castShadow=o.receiveShadow=true;}});
+  g.position.set(p.x, p.y, p.z);
+  scene.add(g);
+  platMeshes.push(g);
+});
+
+// ---------- 코인 ----------
+const coins = [];
+const coinGeo = new THREE.CylinderGeometry(.45,.45,.12,18);
+const coinMat = new THREE.MeshStandardMaterial({color:0xffd23d, emissive:0x8f6a00, roughness:.25, metalness:.6});
+PLATS.slice(1).forEach(p=>{
+  const n = p.w >= 5 ? 3 : 1;
+  for(let i=0;i<n;i++){
+    const m = new THREE.Mesh(coinGeo, coinMat);
+    m.rotation.z = Math.PI/2;
+    m.userData.off = {x:(i-(n-1)/2)*1.6, y:1.2};
+    m.userData.plat = p;
+    m.castShadow = true;
+    scene.add(m);
+    coins.push({m, p, taken:false});
+  }
+});
+document.getElementById('ctot').textContent = coins.length;
+
+// ---------- 깃발 ----------
+const flag = new THREE.Group();
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(.08,.08,5,8),
+  new THREE.MeshStandardMaterial({color:0xdddddd, metalness:.5}));
+pole.position.y = 2.5;
+const cloth = new THREE.Mesh(new THREE.PlaneGeometry(1.8,1.1),
+  new THREE.MeshStandardMaterial({color:0xff4757, side:THREE.DoubleSide}));
+cloth.position.set(.95, 4.2, 0);
+flag.add(pole, cloth);
+flag.position.set(72, 7, 0);
+scene.add(flag);
+
+// ---------- 적 ----------
+const enemies = [];
+function makeEnemy(plat, range, sp){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(.9,.8,.9),
+    new THREE.MeshStandardMaterial({color:0x9b59b6, roughness:.6}));
+  body.position.y = .4;
+  const eyeG = new THREE.SphereGeometry(.13,8,6);
+  const eyeM = new THREE.MeshBasicMaterial({color:0xffffff});
+  const e1 = new THREE.Mesh(eyeG, eyeM); e1.position.set(.2,.6,.46);
+  const e2 = new THREE.Mesh(eyeG, eyeM); e2.position.set(-.2,.6,.46);
+  g.add(body,e1,e2);
+  g.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+  scene.add(g);
+  enemies.push({g, plat, range, sp, t:Math.random()*6, dead:false});
+}
+makeEnemy(PLATS[4], 1.6, 1.6);
+makeEnemy(PLATS[6], 1.6, 2.2);
+makeEnemy(PLATS[8], 3.4, 2);
+
+// ---------- 플레이어 ----------
+const player = new THREE.Group();
+const pbody = new THREE.Mesh(new THREE.SphereGeometry(.5, 18, 14),
+  new THREE.MeshStandardMaterial({color:0xff6b35, roughness:.45}));
+pbody.scale.y = 1.25;
+pbody.position.y = .55;
+const cap = new THREE.Mesh(new THREE.SphereGeometry(.34, 14, 8, 0, Math.PI*2, 0, Math.PI/2),
+  new THREE.MeshStandardMaterial({color:0xd63031, roughness:.5}));
+cap.position.y = 1.05;
+const pe1 = new THREE.Mesh(new THREE.SphereGeometry(.09,8,6), new THREE.MeshBasicMaterial({color:0x222}));
+pe1.position.set(.17,.75,.42);
+const pe2 = pe1.clone(); pe2.position.x = -.17;
+player.add(pbody, cap, pe1, pe2);
+player.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+scene.add(player);
+
+const P = {pos:new THREE.Vector3(0,1,0), vel:new THREE.Vector3(), onGround:false, groundPlat:null, r:.45};
+let coinCount = 0, score = 0, won = false;
+function respawn(){
+  P.pos.set(0,1,0); P.vel.set(0,0,0);
+}
+respawn();
+
+const keys = {};
+addEventListener('keydown', e=>{
+  keys[e.code]=true;
+  if(e.code==='Space') e.preventDefault();
+});
+addEventListener('keyup', e=>keys[e.code]=false);
+
+function platTop(p){ return p.y; }
+
+// ---------- 루프 ----------
+let last = performance.now(), T = 0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last = now;
+  T += dt;
+
+  // 움직이는 플랫폼
+  PLATS.forEach((p,i)=>{
+    if(!p.move) return;
+    const prev = {x:p.x, y:p.y, z:p.z};
+    const v = Math.sin(T*p.move.sp)*p.move.amp;
+    p.x=p.x0; p.y=p.y0; p.z=p.z0;
+    p[p.move.axis] = p[p.move.axis+'0'] + v;
+    platMeshes[i].position.set(p.x,p.y,p.z);
+    // 위에 서 있으면 같이 이동
+    if(P.groundPlat===p){
+      P.pos.x += p.x-prev.x; P.pos.y += p.y-prev.y; P.pos.z += p.z-prev.z;
+    }
+  });
+
+  if(!won){
+    // 이동
+    const sp = 7.2;
+    let mx=0, mz=0;
+    if(keys.ArrowLeft||keys.KeyA) mx-=1;
+    if(keys.ArrowRight||keys.KeyD) mx+=1;
+    if(keys.ArrowUp||keys.KeyW) mz-=1;
+    if(keys.ArrowDown||keys.KeyS) mz+=1;
+    const len = Math.hypot(mx,mz)||1;
+    P.vel.x = mx/len*sp; P.vel.z = mz/len*sp;
+    if(keys.Space && P.onGround){ P.vel.y = 11; P.onGround=false; P.groundPlat=null; }
+    P.vel.y -= 26*dt;
+    P.pos.add(P.vel.clone().multiplyScalar(dt));
+
+    // 착지 판정
+    P.onGround = false; P.groundPlat = null;
+    if(P.vel.y <= 0){
+      for(const p of PLATS){
+        const top = platTop(p);
+        if(Math.abs(P.pos.x-p.x) < p.w/2+P.r*.5 && Math.abs(P.pos.z-p.z) < p.d/2+P.r*.5 &&
+           P.pos.y >= top-.45 && P.pos.y <= top+.55){
+          P.pos.y = top; P.vel.y = 0; P.onGround = true; P.groundPlat = p;
+          break;
+        }
+      }
+    }
+    // 추락
+    if(P.pos.y < -12) respawn();
+
+    // 코인
+    for(const c of coins){
+      if(c.taken) continue;
+      c.m.position.set(c.p.x + c.m.userData.off.x, c.p.y + c.m.userData.off.y, c.p.z);
+      c.m.rotation.y += dt*3;
+      if(P.pos.distanceTo(c.m.position) < 1){
+        c.taken = true; c.m.visible = false;
+        coinCount++; score += 50;
+        document.getElementById('coin').textContent = coinCount;
+        document.getElementById('score').textContent = score;
+      }
+    }
+
+    // 적
+    for(const e of enemies){
+      if(e.dead) continue;
+      e.t += dt*e.sp;
+      e.g.position.set(e.plat.x + Math.sin(e.t)*e.range, e.plat.y, e.plat.z);
+      e.g.rotation.y = Math.cos(e.t)>0 ? 0 : Math.PI;
+      const d = P.pos.distanceTo(e.g.position);
+      if(d < 1.1){
+        if(P.vel.y < -1 && P.pos.y > e.g.position.y+.5){
+          // 밟기!
+          e.dead = true;
+          e.g.scale.y = .15;
+          setTimeout(()=>scene.remove(e.g), 400);
+          P.vel.y = 9;
+          score += 100;
+          document.getElementById('score').textContent = score;
+        } else {
+          respawn();
+        }
+      }
+    }
+
+    // 깃발 도달
+    if(P.pos.distanceTo(flag.position) < 2.2){
+      won = true;
+      if(coinCount===coins.length) score += 500; // 퍼펙트 보너스
+      document.getElementById('wmsg').textContent = `🏁 클리어! 점수 ${score}`;
+      document.getElementById('win').style.display = 'flex';
+    }
+  }
+
+  cloth.rotation.y = Math.sin(T*3)*.25;
+  player.position.copy(P.pos);
+  if(P.vel.x || P.vel.z) player.rotation.y = Math.atan2(P.vel.x, P.vel.z);
+  // 스쿼시&스트레치
+  const sy = P.onGround ? 1 : (P.vel.y>2 ? 1.15 : 1.05);
+  player.scale.y += (sy - player.scale.y)*.2;
+
+  // 카메라
+  const cp = new THREE.Vector3(P.pos.x, P.pos.y+5.5, P.pos.z+11);
+  camera.position.lerp(cp, 1-Math.pow(.001,dt));
+  camera.lookAt(P.pos.x, P.pos.y+1.5, P.pos.z);
+
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

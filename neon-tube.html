@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>네온 튜브 — 중력 플립 러너</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#0ff;
+       font-size:17px;letter-spacing:2px;text-shadow:0 0 10px #0ff;white-space:nowrap;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.4);font-size:12px;white-space:nowrap;}
+  #back{position:fixed;top:14px;left:14px;color:#688;text-decoration:none;font-size:13px;
+        background:rgba(0,20,30,.6);padding:7px 12px;border-radius:18px;border:1px solid #244;}
+  #over{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;background:rgba(0,0,0,.6);color:#fff;}
+  #over h2{font-size:38px;margin:0;color:#ff3d6e;text-shadow:0 0 18px #ff3d6e;}
+  #over p{color:#9cf;font-size:18px;margin:4px 0 14px;}
+  #over button{font-size:16px;padding:10px 30px;border:1px solid #0ff;border-radius:24px;
+               background:transparent;color:#0ff;cursor:pointer;text-shadow:0 0 8px #0ff;}
+  #over button:hover{background:rgba(0,255,255,.12);}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">SCORE <span id="sc">0</span> &nbsp;·&nbsp; BEST <span id="best">0</span></div>
+<div id="hint">←→ (A/D) 로 중력을 비틀어 터널 벽을 달리세요 · 오브 수집 +100</div>
+<div id="over"><h2>CRASHED</h2><p>SCORE <span id="fsc">0</span></p><button id="retry">다시 달리기 (R)</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x000008, 30, 130);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, .1, 200);
+camera.position.set(0, 0, 0);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x334466, 1.2));
+const pl = new THREE.PointLight(0x66ccff, 1.4, 60);
+pl.position.set(0, 0, -8);
+scene.add(pl);
+
+const R = 6;                 // 터널 반지름
+const world = new THREE.Group(); // 회전시킬 월드 (중력 플립 연출)
+scene.add(world);
+
+// 터널
+const tube = new THREE.Mesh(
+  new THREE.CylinderGeometry(R, R, 260, 24, 1, true),
+  new THREE.MeshStandardMaterial({color:0x0a0a18, side:THREE.BackSide, roughness:.9}));
+tube.rotation.x = Math.PI/2;
+tube.position.z = -100;
+world.add(tube);
+
+// 네온 링 (속도감)
+const rings = [];
+const ringMat = new THREE.MeshBasicMaterial({color:0x00ffff});
+for(let i=0;i<22;i++){
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R-.05, .06, 8, 40), ringMat);
+  ring.position.z = -i*12;
+  world.add(ring);
+  rings.push(ring);
+}
+
+// 플레이어 (호버 셰틀) — 화면 하단 고정, 월드가 대신 회전
+const player = new THREE.Group();
+const shipBody = new THREE.Mesh(new THREE.ConeGeometry(.45, 1.3, 4),
+  new THREE.MeshStandardMaterial({color:0xff3d6e, emissive:0x99173a, roughness:.3}));
+shipBody.rotation.x = -Math.PI/2;
+const cockpit = new THREE.Mesh(new THREE.SphereGeometry(.22, 10, 8),
+  new THREE.MeshStandardMaterial({color:0x9adfff, emissive:0x2288bb}));
+cockpit.position.set(0, .25, .1);
+const glow = new THREE.PointLight(0xff3d6e, 1.2, 8);
+player.add(shipBody, cockpit, glow);
+player.position.set(0, -(R-.75), -7);
+scene.add(player);
+
+// ---------- 장애물 & 오브 ----------
+const obstacles = [], orbs = [];
+const obsGeo = new THREE.BoxGeometry(1, 1, 1);
+const OBS_COLORS = [0xff3d6e, 0xffaa00, 0xbb55ff];
+function makeObstacle(z){
+  const ang = Math.random()*Math.PI*2;
+  const w = .55 + Math.random()*.75; // 각도 폭 (라디안)
+  const c = OBS_COLORS[Math.floor(Math.random()*OBS_COLORS.length)];
+  const m = new THREE.Mesh(obsGeo, new THREE.MeshStandardMaterial({color:c, emissive:c, emissiveIntensity:.45, roughness:.4}));
+  m.scale.set(w*(R-1), 1.5, 1);
+  positionOnWall(m, ang, z, .9);
+  world.add(m);
+  obstacles.push({m, ang, z, halfW: w/2 + .08});
+  return obstacles[obstacles.length-1];
+}
+function makeOrb(z){
+  const ang = Math.random()*Math.PI*2;
+  const m = new THREE.Mesh(new THREE.SphereGeometry(.4, 14, 10),
+    new THREE.MeshStandardMaterial({color:0x00ffaa, emissive:0x00ffaa, emissiveIntensity:.9}));
+  positionOnWall(m, ang, z, 1.1);
+  world.add(m);
+  orbs.push({m, ang, z, taken:false});
+}
+function positionOnWall(mesh, ang, z, lift){
+  mesh.position.set(Math.sin(ang)*(R-lift), -Math.cos(ang)*(R-lift), z);
+  mesh.rotation.z = ang;
+  mesh.userData.z = z;
+}
+
+// ---------- 상태 ----------
+let theta = 0, targetTheta = 0;   // 플레이어 각도 (0 = 바닥)
+let speed, dist, score, orbScore, running, best = 0;
+const keys = {};
+addEventListener('keydown', e=>{
+  keys[e.code] = true;
+  if(e.code==='KeyR' && !running) restart();
+});
+addEventListener('keyup', e=>keys[e.code]=false);
+document.getElementById('retry').onclick = ()=>restart();
+
+function restart(){
+  obstacles.forEach(o=>world.remove(o.m));
+  orbs.forEach(o=>world.remove(o.m));
+  obstacles.length = 0; orbs.length = 0;
+  let z = -40;
+  while(z > -240){
+    const n = 1 + Math.floor(Math.random()*2);
+    for(let i=0;i<n;i++) makeObstacle(z - Math.random()*3);
+    if(Math.random()<.5) makeOrb(z - 5);
+    z -= 11;
+  }
+  theta = targetTheta = 0;
+  speed = 16; dist = 0; score = 0; orbScore = 0;
+  running = true;
+  document.getElementById('over').style.display = 'none';
+}
+
+function wrapAngle(a){
+  while(a > Math.PI) a -= Math.PI*2;
+  while(a < -Math.PI) a += Math.PI*2;
+  return a;
+}
+
+// ---------- 루프 ----------
+let last = performance.now();
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last = now;
+
+  if(running){
+    // 조작: 좌우로 중력 비틀기
+    if(keys.ArrowLeft||keys.KeyA) targetTheta -= dt*3.4;
+    if(keys.ArrowRight||keys.KeyD) targetTheta += dt*3.4;
+    theta += wrapAngle(targetTheta - theta) * Math.min(1, dt*10);
+
+    speed = Math.min(46, speed + dt*.9);
+    dist += speed*dt;
+    score = Math.floor(dist) + orbScore;
+    document.getElementById('sc').textContent = score;
+
+    // 월드 이동 & 재활용
+    const dz = speed*dt;
+    for(const o of obstacles){
+      o.z += dz; o.m.position.z = o.z;
+      if(o.z > 2){ // 재배치
+        o.z = -240 - Math.random()*10;
+        o.ang = Math.random()*Math.PI*2;
+        positionOnWall(o.m, o.ang, o.z, .9);
+      }
+    }
+    for(const o of orbs){
+      o.z += dz; o.m.position.z = o.z;
+      o.m.rotation.y += dt*4;
+      if(o.z > 2){
+        o.z = -240 - Math.random()*10;
+        o.ang = Math.random()*Math.PI*2;
+        o.taken = false;
+        o.m.visible = true;
+        positionOnWall(o.m, o.ang, o.z, 1.1);
+      }
+    }
+    for(const r of rings){
+      r.position.z += dz;
+      if(r.position.z > 2) r.position.z -= 264;
+    }
+
+    // 충돌 / 수집 (플레이어 z = -7)
+    for(const o of obstacles){
+      if(Math.abs(o.z + 7) < 1.3 && Math.abs(wrapAngle(o.ang - theta)) < o.halfW + .18){
+        running = false;
+        best = Math.max(best, score);
+        document.getElementById('best').textContent = best;
+        document.getElementById('fsc').textContent = score;
+        document.getElementById('over').style.display = 'flex';
+      }
+    }
+    for(const o of orbs){
+      if(!o.taken && Math.abs(o.z + 7) < 1.4 && Math.abs(wrapAngle(o.ang - theta)) < .3){
+        o.taken = true;
+        o.m.visible = false;
+        orbScore += 100;
+      }
+    }
+  }
+
+  // 중력 플립 연출: 월드를 반대로 회전 → 플레이어는 항상 아래
+  world.rotation.z = -theta;
+  player.rotation.z = (targetTheta - theta) * .8; // 기울기 연출
+  // 링 색 변화
+  const hue = (now*.00005) % 1;
+  ringMat.color.setHSL(hue, 1, .55);
+  pl.color.setHSL(hue, .8, .6);
+
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+restart();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

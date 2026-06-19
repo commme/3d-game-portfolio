@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>모션 캐처 — 몸으로 조종하는 게임</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e2a;font-family:'Segoe UI',sans-serif;}
+  #hud{position:fixed;top:14px;left:50%;transform:translateX(-50%);color:#cfe;
+       font-size:16px;letter-spacing:1px;text-shadow:0 0 8px #2a6;white-space:nowrap;}
+  #hint{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+        color:rgba(255,255,255,.5);font-size:12px;white-space:nowrap;text-align:center;}
+  #back{position:fixed;top:14px;left:14px;color:#9ab;text-decoration:none;font-size:13px;
+        background:rgba(10,20,50,.7);padding:7px 12px;border-radius:18px;}
+  #cam{position:fixed;bottom:14px;right:14px;width:160px;height:120px;border-radius:12px;
+       border:2px solid rgba(120,220,180,.5);transform:scaleX(-1);background:#000;}
+  #camlabel{position:fixed;bottom:140px;right:14px;color:#7ec;font-size:11px;width:160px;text-align:center;}
+  #over{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;background:rgba(0,0,10,.6);color:#fff;}
+  #over h2{font-size:36px;margin:0;color:#ffd93d;text-shadow:0 0 16px #ffd93d;}
+  #over p{color:#9ce;font-size:18px;}
+  #over button{font-size:16px;padding:10px 30px;border:none;border-radius:24px;background:#ffd93d;color:#332;cursor:pointer;font-weight:bold;}
+</style>
+</head>
+<body>
+<a id="back" href="portfolio.html">← 포트폴리오</a>
+<div id="hud">⭐ <span id="sc">0</span> &nbsp;·&nbsp; <span id="hp">❤❤❤</span></div>
+<div id="hint">📷 카메라 앞에서 <b>손이나 몸을 좌우로</b> 움직여 바구니를 조종하세요!<br>별은 받고 💣 폭탄은 피하기 · 키보드 ←→ 도 가능</div>
+<canvas id="cam" width="160" height="120"></canvas>
+<div id="camlabel">모션 미리보기</div>
+<div id="over"><h2>GAME OVER</h2><p>별 <span id="fsc">0</span>개</p><button onclick="location.reload()">다시 하기</button></div>
+<video id="vid" autoplay playsinline style="display:none"></video>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e2a);
+scene.fog = new THREE.Fog(0x0a0e2a, 40, 90);
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, .1, 200);
+camera.position.set(0, 7, 22);
+camera.lookAt(0, 5, 0);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x8899cc,.9));
+const moon = new THREE.DirectionalLight(0xcfe0ff,.8);
+moon.position.set(10,30,15);
+scene.add(moon);
+
+// 밤하늘 별 배경
+(function(){
+  const g = new THREE.BufferGeometry(), v=[];
+  for(let i=0;i<500;i++) v.push((Math.random()-.5)*160, Math.random()*80, -20-Math.random()*60);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v,3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({color:0xaabbee, size:.4})));
+})();
+
+// 바닥 (잔디 언덕)
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 60),
+  new THREE.MeshStandardMaterial({color:0x1d3a2f, roughness:1}));
+ground.rotation.x = -Math.PI/2;
+scene.add(ground);
+
+// ---------- 바구니 ----------
+const basket = new THREE.Group();
+const bowl = new THREE.Mesh(new THREE.CylinderGeometry(2, 1.4, 1.6, 18, 1, true),
+  new THREE.MeshStandardMaterial({color:0xc89b5f, roughness:.8, side:THREE.DoubleSide}));
+const rim = new THREE.Mesh(new THREE.TorusGeometry(2, .14, 8, 24),
+  new THREE.MeshStandardMaterial({color:0x9a7340, roughness:.7}));
+rim.rotation.x = Math.PI/2;
+rim.position.y = .8;
+basket.add(bowl, rim);
+basket.position.y = 1;
+scene.add(basket);
+
+// ---------- 모션 인식 ----------
+const vid = document.getElementById('vid');
+const camCanvas = document.getElementById('cam');
+const camCtx = camCanvas.getContext('2d');
+const W=64, H=48;
+const proc = document.createElement('canvas');
+proc.width=W; proc.height=H;
+const pctx = proc.getContext('2d', {willReadFrequently:true});
+let prevFrame = null, motionX = null, camOK = false;
+
+navigator.mediaDevices && navigator.mediaDevices.getUserMedia({video:{width:320, height:240}})
+  .then(stream=>{ vid.srcObject = stream; camOK = true; })
+  .catch(()=>{ document.getElementById('camlabel').textContent = '카메라 없음 — 키보드로 플레이'; });
+
+function readMotion(){
+  if(!camOK || vid.readyState < 2) return;
+  pctx.drawImage(vid, 0, 0, W, H);
+  const cur = pctx.getImageData(0,0,W,H);
+  camCtx.drawImage(vid, 0, 0, 160, 120);
+  if(prevFrame){
+    let sx=0, n=0;
+    camCtx.fillStyle = 'rgba(126,240,170,.5)';
+    for(let i=0;i<W*H;i++){
+      const d = Math.abs(cur.data[i*4]-prevFrame.data[i*4])
+              + Math.abs(cur.data[i*4+1]-prevFrame.data[i*4+1])
+              + Math.abs(cur.data[i*4+2]-prevFrame.data[i*4+2]);
+      if(d > 70){
+        const x = i%W;
+        sx += x; n++;
+        camCtx.fillRect(x*2.5, Math.floor(i/W)*2.5, 2.5, 2.5);
+      }
+    }
+    if(n > 12){
+      const cx = sx/n/W;        // 0..1
+      motionX = (1-cx)*2-1;     // 미러 적용, -1..1
+    }
+  }
+  prevFrame = cur;
+}
+setInterval(readMotion, 50);
+
+// 키보드 폴백
+const keys = {};
+addEventListener('keydown', e=>keys[e.code]=true);
+addEventListener('keyup', e=>keys[e.code]=false);
+
+// ---------- 떨어지는 것들 ----------
+const items = [];
+const starGeo = new THREE.OctahedronGeometry(.7, 0);
+const starMat = new THREE.MeshStandardMaterial({color:0xffe14d, emissive:0xbb8800, roughness:.2});
+const bombMat = new THREE.MeshStandardMaterial({color:0x333344, roughness:.4, metalness:.3});
+function spawn(){
+  const bomb = Math.random() < .25;
+  let m;
+  if(bomb){
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.SphereGeometry(.65,14,10), bombMat);
+    const fuse = new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,.5,6),
+      new THREE.MeshStandardMaterial({color:0xaa6633}));
+    fuse.position.y = .75;
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(.12,6,4),
+      new THREE.MeshBasicMaterial({color:0xff8833}));
+    spark.position.y = 1.05;
+    g.add(b, fuse, spark);
+    m = g;
+  } else {
+    m = new THREE.Mesh(starGeo, starMat);
+  }
+  m.position.set((Math.random()-.5)*26, 26, 0);
+  scene.add(m);
+  items.push({m, bomb, sp: 6 + Math.random()*3 + diff});
+}
+
+// 반짝 효과
+const sparks = [];
+function burst(p, c){
+  for(let i=0;i<10;i++){
+    const s = new THREE.Mesh(new THREE.SphereGeometry(.12,6,4),
+      new THREE.MeshBasicMaterial({color:c, transparent:true}));
+    s.position.copy(p);
+    scene.add(s);
+    sparks.push({m:s, v:new THREE.Vector3((Math.random()-.5)*8, Math.random()*8, (Math.random()-.5)*4), life:.6});
+  }
+}
+
+let score = 0, hp = 3, diff = 0, spawnT = 0, running = true;
+
+// ---------- 루프 ----------
+let last = performance.now(), T=0;
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt = Math.min((now-last)/1000, 1/30); last=now;
+  T += dt;
+
+  if(running){
+    // 바구니 이동: 모션 우선, 키보드 보조
+    let target = basket.position.x;
+    if(motionX !== null) target = motionX*13;
+    if(keys.ArrowLeft||keys.KeyA){ target = basket.position.x - 16*dt*8; motionX=null; }
+    if(keys.ArrowRight||keys.KeyD){ target = basket.position.x + 16*dt*8; motionX=null; }
+    basket.position.x += (target - basket.position.x)*Math.min(1, dt*8);
+    basket.position.x = Math.max(-14, Math.min(14, basket.position.x));
+    basket.rotation.z = (basket.position.x - target)*.04;
+
+    diff += dt*.08;
+    spawnT -= dt;
+    if(spawnT <= 0){ spawn(); spawnT = Math.max(.4, 1.1 - diff*.1); }
+
+    for(let i=items.length-1;i>=0;i--){
+      const it = items[i];
+      it.m.position.y -= it.sp*dt;
+      it.m.rotation.y += dt*3;
+      const caught = Math.abs(it.m.position.y - 2) < 1 &&
+                     Math.abs(it.m.position.x - basket.position.x) < 2.1;
+      if(caught){
+        if(it.bomb){
+          hp--;
+          document.getElementById('hp').textContent = '❤'.repeat(Math.max(0,hp));
+          burst(it.m.position, 0xff5544);
+          if(hp<=0){
+            running = false;
+            document.getElementById('fsc').textContent = score;
+            document.getElementById('over').style.display = 'flex';
+          }
+        } else {
+          score++;
+          document.getElementById('sc').textContent = score;
+          burst(it.m.position, 0xffe14d);
+        }
+        scene.remove(it.m); items.splice(i,1);
+        continue;
+      }
+      if(it.m.position.y < .4){
+        scene.remove(it.m); items.splice(i,1);
+      }
+    }
+  }
+
+  for(let i=sparks.length-1;i>=0;i--){
+    const s = sparks[i];
+    s.life -= dt;
+    s.v.y -= 14*dt;
+    s.m.position.add(s.v.clone().multiplyScalar(dt));
+    s.m.material.opacity = Math.max(0, s.life/.6);
+    if(s.life<=0){ scene.remove(s.m); sparks.splice(i,1); }
+  }
+
+  renderer.render(scene, camera);
+}
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
